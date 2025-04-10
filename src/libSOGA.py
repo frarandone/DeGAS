@@ -63,7 +63,12 @@ def start_SOGA(cfg, params_dict={}, pruning=None, Kmax=None, parallel=None,useR=
 def SOGA(node, data, parallel, exec_queue, params_dict):
 
     #print('Entering', node)
-    #print(node.dist)
+    #if node.dist:
+    #    print(node.dist.gm.n_comp(), ' components')
+    #    print(check_dist_non_deg(node.dist))
+    #    print(node.dist)
+    #    print('mean', node.dist.gm.mean())
+    #    print('cov', node.dist.gm.cov())
     #print('\n')
 
     if node.type != 'merge' and node.type != 'exit':
@@ -129,9 +134,17 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
             p, current_dist = truncate(current_dist, current_trunc, data, params_dict)     ### see libSOGAtruncate
             current_trunc = None
             current_p = p*current_p
+        #print('After truncation:')
+        #print('current_p: ', current_p)
+        #print('mean: ', current_dist.gm.mean())
+        #print('cov: ', current_dist.gm.cov())
+        #print('\n')
         if current_p > TOL_PROB:
             current_dist = update_rule(current_dist, node.expr, data, params_dict)         ### see libSOGAupdate
-
+        #print('After update:')
+        #print('mean: ', current_dist.gm.mean())
+        #print('cov: ', current_dist.gm.cov())
+        #print('\n')
         # updating child
         child = node.children[0]
         if child.type == 'loop' and not data[child.idx][0] is None:

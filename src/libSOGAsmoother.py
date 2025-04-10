@@ -99,8 +99,11 @@ def smooth_asgmt(dist, updated_dist, node, smoothed_vars, data, params_dict):
     target_var = lhs
     if '[' in target_var:
         var_name, idx = extract_var_and_index(target_var)
-        idx = int(data[idx][0].item())
-        target_idx = dist.var_list.index('{}[{}]'.format(var_name, idx))
+        if idx in data.keys():
+            idx = int(data[idx][0].item())
+            target_idx = dist.var_list.index('{}[{}]'.format(var_name, idx))
+        else:
+            target_idx = dist.var_list.index(target_var)
     else:
         target_idx = dist.var_list.index(target_var)
     # variables used in the asgmt
@@ -205,10 +208,12 @@ def smooth_trunc(trunc, node, smoothed_vars, data, params_dict):
 def select_delta(dist, var):
     """ Selects the delta for the smooth_trunc function.
     It is based on the standard deviation of the variable var in the distribution dist."""
-    var_idx = dist.var_list.index(var)
+    #print('Selecting delta for', var, dist)
+    #var_idx = dist.var_list.index(var)
     # takes the smallest std
-    std = torch.max(torch.sqrt(dist.gm.sigma[:,var_idx,var_idx]))
-    return 5*std
+    #std = torch.max(torch.sqrt(dist.gm.sigma[:,var_idx,var_idx]))
+    #print('selected delta=', 5*std)
+    return 5*SMOOTH_EPS
 
 # SOGA SMOOTH FUNCTIONS
 

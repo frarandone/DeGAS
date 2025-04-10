@@ -16,13 +16,13 @@ for i in range(11) {
     currT = newT + gauss(0., 0.05);          /* smoothing added here */
 
     if isOn > 0 {
-        if currT > _tOff {
+        if newT > _tOff {
             isOn = gauss(-1, 0.01);          /* smoothing added here */
         } else {
             skip;
         } end if;
     } else {
-        if currT < _tOn {
+        if newT < _tOn {
             isOn = gauss(1, 0.01);          /* smoothing added here */
         } else {
             skip;

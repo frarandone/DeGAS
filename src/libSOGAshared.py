@@ -34,8 +34,8 @@ TOL_PROB = 1e-10# 1e-4         # probability below prob_tol are treated as zero
 TOL_ERR = 5e-3          # error tolerance (print an error message if error is above)
 INFTY = 1e10            # infinity
 # SMOOTHING PARAMETERS
-SMOOTH_EPS = 1e-5    # starting noise for smoothing
-SMOOTH_DELTA = 1e-5  # addition to gaussian noise for smoothing
+SMOOTH_EPS = 1e-2    # starting noise for smoothing
+SMOOTH_DELTA = 1e-2  # addition to gaussian noise for smoothing
 
 
 #delta_tol = 1e-10 # if the 1-norm of a covariance matrix is <= delta_tol the corresponding Gaussian component is treated as a delta
