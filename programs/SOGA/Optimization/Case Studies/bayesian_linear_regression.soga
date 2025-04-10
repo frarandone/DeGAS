@@ -5,6 +5,11 @@ data X = [0.3100, 0.3400, 0.3500, 0.3700, 0.3900, 0.3900, 0.4000, 0.4000, 0.4100
 
 array[30] y;
 
+w = gm([1.], [_muw], [_sigmaw]);
+b = gm([1.], [_mub], [_sigmab]);
+
 for i in range(30) {
-    y[i] = _w * X[i] + _b + gauss(0., 1);          
+    y[i] = w * X[i]; 
+    y[i] = y[i] + b;
+    y[i] = y[i]+ gm([1.], [0.], [_sigmay]);          
 } end for;
