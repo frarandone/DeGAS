@@ -302,7 +302,6 @@ def SOGAsmooth(node, smoothed_vars, data, parallel, exec_queue, params_dict):
                 if child.cond == False:
                     update_child(child, node.dist, current_p, current_trunc, exec_queue)
      
-
     # if state checks wheter cond!=None. If yes, truncates to current_trunc, eventually negating it. In any case applies the rule in expr. Appends the distribution in the next merge node or calls recursively on children. If child is loop node increments its idx.
     if node.type == 'state':
         if node.cond != None and not current_trunc is None:

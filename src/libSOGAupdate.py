@@ -110,10 +110,12 @@ def update_rule(dist, expr, data, params_dict):
     if expr == 'skip':
         return dist
     else:
+        print('expr', expr)
         rule_func = asgmt_parse(dist.var_list, expr, data, params_dict)    
         return rule_func(dist)
     
 def add_func(self, dist):
+    print(self.add_coeff)
     
     i = self.target
     old_dim = dist.gm.n_dim()

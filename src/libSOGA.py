@@ -110,7 +110,8 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
                     data_idx = int(data_idx)
                 node.const = torch.tensor(int(data[data_name][data_idx]))
             else:
-                node.const = torch.tensor(int(node.const))            
+                node.const = torch.tensor(int(node.const))  
+                
         # successively checks the condition and decides which child node must be accessed
         if data[node.idx][0] < node.const:
             for child in node.children:
