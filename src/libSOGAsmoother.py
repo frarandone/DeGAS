@@ -12,7 +12,7 @@ from libSOGAmerge import *
 def check_dist_non_deg(dist):    
     """ Checks whether all cov matrices in dist are non-degenerate. Returns True if some are degenerate"""
     sigma = dist.gm.sigma
-    if torch.any(torch.linalg.eigh(sigma)[0] < TOL_EIG):
+    if torch.any(torch.abs(torch.linalg.eigh(sigma)[0]) < TOL_EIG):
         #deg_idx, _ = torch.where(torch.linalg.eigh(sigma)[0] < TOL_EIG)
         #print(dist.gm.pi[deg_idx[0]], dist.gm.sigma[deg_idx[0]])
         return True
@@ -117,7 +117,6 @@ def smooth_asgmt(dist, updated_dist, node, smoothed_vars, data, params_dict):
         # CASE 1: for some components the distribution is degenerate
         # In this case the variable needs to be smoothed
         if torch.any(updated_dist.gm.sigma[:,target_idx,target_idx] == 0):
-            
             smoothed_vars.append(target_var)
             gm_vars = [var for var in vars if 'gm(' in var]
             # if a random term is present at the rhs we smooth that
@@ -248,7 +247,7 @@ def SOGAsmooth(node, smoothed_vars, data, parallel, exec_queue, params_dict):
     #print('Entering', node)
     #if node.dist:
     #    print(node.dist.gm.n_comp(), ' components')
-    #    print(check_dist_non_deg(node.dist))
+    #    print('Check non deg', check_dist_non_deg(node.dist))
     #    print(node.dist)
     #    print('mean', node.dist.gm.mean())
     #    print('cov', node.dist.gm.cov())
