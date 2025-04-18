@@ -155,6 +155,7 @@ class LoopNode(CFGnode):
         super().__init__(node_name, 'loop')
         self.idx = None
         self.const = None
+        self.smooth = False # needed for smoothing
         
     def __str__(self):
         return 'LoopNode<{}>'.format(self.name)
