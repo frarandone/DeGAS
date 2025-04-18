@@ -133,7 +133,7 @@ def smooth_asgmt(node, var_list, smoothed_vars, data, smooth_eps):
                     smoothed_vars = update_smoothed_vars(smoothed_vars, var_name, idx, var_list, data)
     # CASE 3: variables deterministically determined by the others (no gm_vars)
     if len(vars) > 0 and len(gm_vars) == 0:
-        if not expr_is_prod(orig_expr, vars):
+        if not expr_is_prod(orig_expr, vars) and not target_var in vars: # if the expression is not a product of two variables and the target variable is not in the expression
             new_orig_expr = orig_expr + '+ gm([1.], [0.], [{:.10f}])'.format(smooth_eps)
             smoothed_vars = update_smoothed_vars(smoothed_vars, var_name, idx, var_list, data)
     
