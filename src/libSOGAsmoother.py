@@ -154,8 +154,12 @@ def smooth_asgmt(dist, updated_dist, node, smoothed_vars, data, params_dict):
 def smooth_trunc(trunc, node, smoothed_vars, data, params_dict):
     """ trunc is a truncation var ('==' | '!=') val.
     This functions transforms the conditions:
-    var == val -> var > val - delta and var < val + delta
-    var != val -> var < val - delta or var > val + delta
+    > var == val -> var > val - delta and var < val + delta
+    > var != val -> var < val - delta or var > val + delta
+    > var <= val -> var < val + delta
+    > var < val -> var < val - delta
+    > var >= val -> var > val - delta
+    > var > val -> var > val + delta
     where delta is selected by the function select_delta, depending on the current distribution"""
     
     if '==' in trunc:

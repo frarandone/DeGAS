@@ -90,7 +90,7 @@ class AsgmtRule(ASGMTListener):
                 self.func = partial(add_func, self)
             # this part makes the distribution non differentiable but is needed for the smoother
             else:
-                self.func = partial(const_func, self)
+                self.func = partial(const_func, self)    # check if this is needed after the new smoother is ready
                 
     
 def asgmt_parse(var_list, expr, data, params_dict):

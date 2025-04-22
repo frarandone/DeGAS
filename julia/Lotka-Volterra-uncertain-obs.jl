@@ -1,21 +1,35 @@
-using DifferentialEquations, DiffEqParamEstim, Optimization, OptimizationBBO
-f1 = function (du, u, p, t)
-    du[1] = p[1] * u[1] - p[2] * u[1] * u[2]
-    du[2] = -3.0 * u[2] + u[1] * u[2]
+using DifferentialEquations, RecursiveArrayTools, Plots, DiffEqParamEstim
+using Optimization, ForwardDiff, OptimizationOptimJL, OptimizationBBO
+
+function f(du, u, p, t)
+    du[1] = dx = p[1] * u[1] - u[1] * u[2]
+    du[2] = dy = -3 * u[2] + u[1] * u[2]
 end
-p = [1.5, 1.0]
+
 u0 = [1.0; 1.0]
 tspan = (0.0, 10.0)
-prob1 = ODEProblem(f1, u0, tspan, p)
-sol = solve(prob1, Tsit5())
+p = [1.5]
+prob = ODEProblem(f, u0, tspan, p)
 
-using RecursiveArrayTools # for VectorOfArray
+sol = solve(prob, Tsit5())
 t = collect(range(0, stop = 10, length = 200))
-function generate_data(sol, t)
-    randomized = VectorOfArray([(sol(t[i]) + 0.01randn(2)) for i in 1:length(t)])
-    data = convert(Array, randomized)
-end
-aggregate_data = convert(Array, VectorOfArray([generate_data(sol, t) for i in 1:100]))
+using RecursiveArrayTools # for VectorOfArray
+randomized = VectorOfArray([(sol(t[i]) + 0.01randn(2)) for i in 1:length(t)])
+data = convert(Array, randomized)
 
-using Distributions
-distributions = [fit_mle(Normal, aggregate_data[i, j, :]) for i in 1:2, j in 1:200]
+newprob = remake(prob, p = [1.42])
+newsol = solve(newprob, Tsit5())
+plot(sol)
+plot!(newsol)
+
+cost_function = build_loss_objective(prob, Tsit5(), L2Loss(t, data),
+                                     Optimization.AutoForwardDiff(),
+                                     maxiters = 10000, verbose = false)
+
+vals = 0.0:0.1:10.0
+plot(vals, [cost_function(i) for i in vals], yscale = :log10,
+     xaxis = "Parameter", yaxis = "Cost", title = "1-Parameter Cost Function",
+     lw = 3)
+
+optprob = Optimization.OptimizationProblem(cost_function, [1.42])
+optsol = solve(optprob, BFGS())

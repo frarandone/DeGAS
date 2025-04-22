@@ -84,7 +84,10 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
     
     # if tests saves LBC and calls on children
     if node.type == 'test':
-        current_trunc = node.LBC
+        if node.smooth:
+            current_trunc = node.smooth
+        else:
+            current_trunc = node.LBC
         if '==' in current_trunc or '!=' in current_trunc:
             print('Degeneracy in if condition detected. Please smooth the program.')
             raise RuntimeError
@@ -140,8 +143,12 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
         #print('mean: ', current_dist.gm.mean())
         #print('cov: ', current_dist.gm.cov())
         #print('\n')
+        if node.smooth:
+            expr = node.smooth
+        else:
+            expr = node.expr
         if current_p > TOL_PROB:
-            current_dist = update_rule(current_dist, node.expr, data, params_dict)         ### see libSOGAupdate
+            current_dist = update_rule(current_dist, expr, data, params_dict)         ### see libSOGAupdate
         #print('After update:')
         #print('mean: ', current_dist.gm.mean())
         #print('cov: ', current_dist.gm.cov())
@@ -155,7 +162,10 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
             
     # if observe truncates to LBC and calls on children
     if node.type == 'observe':
-        current_trunc = node.LBC
+        if node.smooth:
+            current_trunc = node.smooth
+        else:
+            current_trunc = node.LBC
         #if parallel is not None and parallel >1:
         #    p, current_dist = parallel_truncate(current_dist, current_trunc, data,parallel)
         #else:
