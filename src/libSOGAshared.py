@@ -63,7 +63,7 @@ class GaussianMix():
         return str_repr
     
     def comp(self, k):
-        return GaussianMix(torch.tensor([[1.]]), torch.clone(self.mu[:,k]), torch.clone(self.sigma[:,:,k]))
+        return GaussianMix(torch.tensor([[1.]]), torch.clone(self.mu[k,:].unsqueeze(0)), torch.clone(self.sigma[k,:,:].unsqueeze(0)))
         
     # Pdfs 
     def comp_pdf(self, x, k):
@@ -253,7 +253,7 @@ def extend_dist(self, dist):
         new_sigmas = torch.empty((0,new_dim,new_dim))
         for part in product(*[range(len(mean)) for mean in self.aux_means]):                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
             # for each combination multiplies the original weight by the weights of the combination
-            aux_pi = torch.prod(torch.tensor([self.aux_pis[i][part[i]] for i in range(len(part))]))
+            aux_pi = torch.prod(torch.stack([self.aux_pis[i][part[i]] for i in range(len(part))]))
             new_pis = torch.vstack([new_pis, (aux_pi*dist.gm.pi)]) 
             # for each combination creates new means
             aux_mu = torch.hstack([self.aux_means[i][part[i]] for i in range(len(part))])

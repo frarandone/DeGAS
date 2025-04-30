@@ -191,15 +191,9 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
     if node.type == 'exit':
         return
     
-    #if node.type == 'prune':
-    #    current_dist = prune(current_dist,'classic',node.Kmax)        ### options: 'classic', 'ranking' (see libSOGAmerge)
-    #    node.list_dist = []
-    #    for child in node.children:
-    #        if child.type == 'merge' or child.type == 'exit':
-    #            child.list_dist.append((current_p, current_dist))
-    #        else:
-    #            child.set_dist(copy(current_dist))
-    #            child.set_p(current_p)
-    #            child.set_trunc(current_trunc)
-    #        exec_queue.append(child)
+    if node.type == 'prune':
+        current_dist = prune(current_dist,'classic',node.Kmax)        ### options: 'classic', 'ranking' (see libSOGAmerge)
+        node.list_dist = []
+        child = node.children[0]
+        update_child(child, current_dist, current_p, current_trunc, exec_queue)
 
