@@ -32,7 +32,7 @@ def update_child(child, dist, p, trunc, exec_queue):
     if child not in exec_queue:
         exec_queue.append(child)
 
-def start_SOGA(cfg, params_dict={}, pruning=None, Kmax=None, parallel=None,useR=False):
+def start_SOGA(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=None,useR=False):
     """ Invokes SOGA on the root of the CFG object cfg, initializing current_distribution to a Dirac delta centered in zero.
         If pruning='classic' implements pruning at the merge nodes with maximum number of component Kmax.
         Returns an object Dist (defined in libSOGAshared) with the final computed distribution."""
@@ -52,7 +52,7 @@ def start_SOGA(cfg, params_dict={}, pruning=None, Kmax=None, parallel=None,useR=
     
     # executes SOGA on nodes on exec_queue
     while(len(exec_queue)>0):
-        SOGA(exec_queue.pop(0), data, parallel, exec_queue, params_dict)
+        SOGA(exec_queue.pop(0), data, parallel, pruning, exec_queue, params_dict)
     
     # returns output distribution
     p, current_dist = merge(cfg.node_list['exit'].list_dist)
@@ -60,7 +60,7 @@ def start_SOGA(cfg, params_dict={}, pruning=None, Kmax=None, parallel=None,useR=
     return current_dist
 
 
-def SOGA(node, data, parallel, exec_queue, params_dict):
+def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
 
     #print('Entering', node)
     #if node.dist:
@@ -192,7 +192,7 @@ def SOGA(node, data, parallel, exec_queue, params_dict):
         return
     
     if node.type == 'prune':
-        current_dist = prune(current_dist,'classic',node.Kmax)        ### options: 'classic', 'ranking' (see libSOGAmerge)
+        current_dist = prune(current_dist, pruning, node.Kmax)        ### options: 'classic', 'ranking' (see libSOGAmerge)
         node.list_dist = []
         child = node.children[0]
         update_child(child, current_dist, current_p, current_trunc, exec_queue)

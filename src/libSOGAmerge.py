@@ -55,21 +55,21 @@ def merge(list_dist):
 def prune(current_dist, pruning, Kmax):
     if pruning == 'classic':
         current_dist = classic_prune(current_dist, Kmax)
-#    elif pruning == 'ranking':
-#        current_dist = ranking_prune(current_dist, Kmax)
+    elif pruning == 'ranking':
+        current_dist = ranking_prune(current_dist, Kmax)
     return current_dist
-#
-#
-#def ranking_prune(current_dist, Kmax):
-#    """ Keeps only the Kmax component with higher prob"""
-#    if current_dist.gm.n_comp() > Kmax:
-#        rank = np.argsort(current_dist.gm.pi)[::-1]
-#        current_dist.gm.pi = list(np.array(current_dist.gm.pi)[rank])[:Kmax]
-#        current_dist.gm.mu = list(np.array(current_dist.gm.mu)[rank])[:Kmax]
-#        current_dist.gm.sigma = list(np.array(current_dist.gm.sigma)[rank])[:Kmax]
-#        current_dist.gm.pi = list(np.array(current_dist.gm.pi)/sum(current_dist.gm.pi))
-#    return current_dist
-#
+
+
+def ranking_prune(current_dist, Kmax):
+    """ Keeps only the Kmax component with higher prob"""
+    if current_dist.gm.n_comp() > Kmax:
+        rank = torch.argsort(current_dist.gm.pi, dim=0, descending=True)
+        current_dist.gm.pi = current_dist.gm.pi[rank].squeeze(1)[:2]
+        current_dist.gm.mu = current_dist.gm.mu[rank].squeeze(1)[:2]
+        current_dist.gm.sigma = current_dist.gm.sigma[rank].squeeze(1)[:2]
+        current_dist.gm.pi = current_dist.gm.pi/torch.sum(current_dist.gm.pi)
+    return current_dist
+
 
 def compute_matrix_mean(current_dist):
     pi = current_dist.gm.pi
