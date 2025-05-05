@@ -52,94 +52,96 @@ def merge(list_dist):
     return current_p, Dist(list_dist[0][1].var_list, new_gm)
 
 
-#def prune(current_dist, pruning, Kmax):
-#    if pruning == 'classic':
-#        current_dist = classic_prune(current_dist, Kmax)
-#    elif pruning == 'ranking':
-#        current_dist = ranking_prune(current_dist, Kmax)
-#    return current_dist
-#
-#
-#def ranking_prune(current_dist, Kmax):
-#    """ Keeps only the Kmax component with higher prob"""
-#    if current_dist.gm.n_comp() > Kmax:
-#        rank = np.argsort(current_dist.gm.pi)[::-1]
-#        current_dist.gm.pi = list(np.array(current_dist.gm.pi)[rank])[:Kmax]
-#        current_dist.gm.mu = list(np.array(current_dist.gm.mu)[rank])[:Kmax]
-#        current_dist.gm.sigma = list(np.array(current_dist.gm.sigma)[rank])[:Kmax]
-#        current_dist.gm.pi = list(np.array(current_dist.gm.pi)/sum(current_dist.gm.pi))
-#    return current_dist
-#
-#def compute_matrix_mean(current_dist):
-#    s = len(current_dist.gm.pi)
-#    pi = np.array(current_dist.gm.pi)
-#    pmu = np.array(pi).reshape(-1,1)*np.array(current_dist.gm.mu)
-#    sums = pmu[:,None] + pmu
-#    pis = (pi + pi[:,None]).reshape(s,s,1)
-#    return sums/pis
-#        
-#def classic_prune(current_dist, Kmax):
-#    """ Merges components with optimal cost"""
-#    if current_dist.gm.n_comp() > Kmax:
-#        n = current_dist.gm.n_comp()
-#        #computes a matrix containing the weighted means
-#        matrix_mu = compute_matrix_mean(current_dist)
-#        # At the first iteration computes the whole matrix cot
-#        matrixcost = np.ones((n,n))*np.inf
-#        for i in range(n):
-#            for j in range(i):
-#                matrixcost[i,j] = current_dist.gm.pi[i]*dist(current_dist.gm.mu[i],matrix_mu[i,j]) + current_dist.gm.pi[j]*dist(current_dist.gm.mu[j],matrix_mu[i,j])
-#       
-#        while n > Kmax:
-#            # Computes indices of components with minimal cost
-#            min_idx = np.where(matrixcost == np.min(matrixcost))
-#            i, j = min_idx
-#            i = i[0]
-#            j = j[0]      
-#            # Merges components
-#            current_dist = merge_comp(current_dist, i, j, matrix_mu[i,j])
-#            # Updates 
-#            n = current_dist.gm.n_comp()
-#            matrix_mu = compute_matrix_mean(current_dist)
-#            matrixcost = matrix_delete(matrixcost, i, j)
-#            # If number of components still too high computes the new matrix cost adding just one row
-#            if n > Kmax:
-#                for j in range(n-1):
-#                    matrixcost[n-1,j] = current_dist.gm.pi[n-1]*dist(current_dist.gm.mu[n-1],matrix_mu[n-1,j]) + current_dist.gm.pi[j]*dist(current_dist.gm.mu[j],matrix_mu[n-1,j])
-#    return current_dist
-#
-#
-#def matrix_delete(matrix, i, j):
-#    matrix = np.delete(matrix, max(i,j), axis=0)
-#    matrix = np.delete(matrix, max(i,j), axis=1)
-#    matrix = np.delete(matrix, min(i,j), axis=0)
-#    matrix = np.delete(matrix, min(i,j), axis=1)
-#    matrix = np.vstack([matrix, np.ones((1, len(matrix)))*np.inf])
-#    matrix = np.hstack([matrix, np.ones((matrix.shape[0],1))*np.inf])
-#    return matrix
-#
-#def dist(vec1, vec2):
-#    return sum((np.array(vec1)-np.array(vec2))**2)
-#
-#
-#def merge_comp(current_dist, i, j, tot_mean):
-#    pii, pij = current_dist.gm.pi[i], current_dist.gm.pi[j]
-#    compi, compj = current_dist.gm.comp(i), current_dist.gm.comp(j)
-#    # deletes component to be merged from the current dist
-#    idx_list = [i,j]
-#    idx_list.sort(reverse=True)
-#    for idx in idx_list:
-#        del current_dist.gm.pi[idx]
-#        del current_dist.gm.mu[idx]
-#        del current_dist.gm.sigma[idx]
-#    # computes statistics of the merged component
-#    tot_p = pii + pij
-#    v = np.array(np.array([compi.mu[0], compj.mu[0]])) - tot_mean
-#    tot_cov = np.tensordot(np.array([pii, pij])/tot_p, np.array([compi.sigma[0], compj.sigma[0]]), axes=1) + np.transpose(v).dot(((np.array([pii,pij])/tot_p).reshape(-1,1)*v))
-#    # updates distribution
-#    current_dist.gm.pi.append(tot_p)
-#    current_dist.gm.mu.append(tot_mean)
-#    current_dist.gm.sigma.append(tot_cov)
-#    return current_dist
+def prune(current_dist, pruning, Kmax):
+    if pruning == 'classic':
+        current_dist = classic_prune(current_dist, Kmax)
+    elif pruning == 'ranking':
+        current_dist = ranking_prune(current_dist, Kmax)
+    return current_dist
 
+
+def ranking_prune(current_dist, Kmax):
+    """ Keeps only the Kmax component with higher prob"""
+    if current_dist.gm.n_comp() > Kmax:
+        rank = torch.argsort(current_dist.gm.pi, dim=0, descending=True)
+        current_dist.gm.pi = current_dist.gm.pi[rank].squeeze(1)[:Kmax]
+        current_dist.gm.mu = current_dist.gm.mu[rank].squeeze(1)[:Kmax]
+        current_dist.gm.sigma = current_dist.gm.sigma[rank].squeeze(1)[:Kmax]
+        current_dist.gm.pi = current_dist.gm.pi/torch.sum(current_dist.gm.pi)
+    return current_dist
+
+
+def compute_matrix_mean(current_dist):
+    pi = current_dist.gm.pi
+    s = len(current_dist.gm.pi)
+    pmu = pi.view(-1,1)*current_dist.gm.mu
+    sums = pmu.unsqueeze(1) + pmu
+    pis = (pi + pi.unsqueeze(1)).reshape(s,s,1)
+    return sums/pis
+
+def delete_indices(tensor, idx_list):
+    """ Deletes elements from a tensor at the specified indices. """
+    mask = torch.ones(tensor.size(0), dtype=torch.bool)
+    mask[idx_list] = False  # Set the indices in idx_list to False
+    return tensor[mask]
+
+
+def merge_comp(current_dist, i, j, tot_mean):
+    pii, pij = current_dist.gm.pi[i], current_dist.gm.pi[j]
+    compi, compj = current_dist.gm.comp(i), current_dist.gm.comp(j)
+    # deletes component to be merged from the current dist
+    idx_list = [i,j]
+    current_dist.gm.pi = delete_indices(current_dist.gm.pi, idx_list)
+    current_dist.gm.mu = delete_indices(current_dist.gm.mu, idx_list)
+    current_dist.gm.sigma = delete_indices(current_dist.gm.sigma, idx_list)
+    # computes statistics of the merged component
+    tot_p = pii + pij
+    v = torch.stack([compi.mu[0], compj.mu[0]]) - tot_mean
+    pi_pair = torch.vstack([pii/tot_p, pij/tot_p])
+    sigma_pair = torch.stack([compi.sigma[0], compj.sigma[0]])
+    tot_cov = (pi_pair.view(-1, 1, 1) * sigma_pair).sum(dim=0) + torch.mm(v.t(), pi_pair*v)
+    # updates distribution
+    current_dist.gm.pi = torch.cat((current_dist.gm.pi, tot_p.unsqueeze(0)))
+    current_dist.gm.mu = torch.cat((current_dist.gm.mu, tot_mean.unsqueeze(0)))
+    current_dist.gm.sigma = torch.cat((current_dist.gm.sigma, tot_cov.unsqueeze(0)))
+    return current_dist
+        
+def classic_prune(current_dist, Kmax):
+    """ Merges components with optimal cost 
+        cost(i, j) = pi_i * || mu_i - weighted_sum_ij ||^2 + pi_j * || mu_j - weighted_sum_ij ||^2
+        until the number of components is less than Kmax. """
+    
+    if current_dist.gm.n_comp() > Kmax:
+        n = current_dist.gm.n_comp()
+
+        # Computes the cost matrix
+        matrix_mu = compute_matrix_mean(current_dist)     # elem (i,j) is the weighted sum of mu_i and mu_j
+        dist_matrix = torch.sum(torch.pow((current_dist.gm.mu - matrix_mu), 2), axis=2).T   # elem (i,j) is the distance between mu_i and the weighted sum of mu_i and mu_j
+        weight_dist_matrix = current_dist.gm.pi.view(-1,1)*dist_matrix   # row i is pi_i * || mu_i - weighted_sum_ij ||^2
+        cost_matrix = weight_dist_matrix + weight_dist_matrix.T          # elem (i,j) is the cost of merging i and j
+       
+        while n > Kmax:
+            # Computes indices of components with minimal cost
+            i_indices, j_indices = torch.triu_indices(cost_matrix.size(0), cost_matrix.size(1), offset=1)
+            upper_triangular_values = cost_matrix[i_indices, j_indices]
+            min_index = torch.argmin(upper_triangular_values)
+            i, j = i_indices[min_index].item(), j_indices[min_index].item()  
+            # Merges components
+            current_dist = merge_comp(current_dist, i, j, matrix_mu[i,j])
+            # Updates n and matrix_mu
+            n = current_dist.gm.n_comp()
+            matrix_mu = compute_matrix_mean(current_dist)
+            # Deletes the row and column of the merged components from the cost matrix
+            mask = torch.ones(cost_matrix.size(0), dtype=torch.bool)
+            mask[[i,j]] = False  # Set the indices to remove as False
+            cost_matrix = cost_matrix[mask][:, mask]
+            # If number of components still too high adds a new row and column to the cost matrix, corresponding to the new component
+            if n > Kmax:
+                # computes the costs for the newly added component
+                new_cost = torch.sum(torch.pow((current_dist.gm.mu[-1].unsqueeze(0) - matrix_mu[:, -1]), 2), axis = 1).unsqueeze(0)
+                new_column = new_cost[:, :-1].T  
+                new_row = new_cost  
+                cost_matrix = torch.cat((cost_matrix, new_column), dim=1)
+                cost_matrix = torch.cat((cost_matrix, new_row), dim=0)
+    return current_dist
 

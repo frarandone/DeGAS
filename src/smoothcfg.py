@@ -275,5 +275,6 @@ def smoother(node, var_list, smoothed_vars, data, parallel, exec_queue, params_d
     
 
     if node.type == 'prune':
-        if child not in exec_queue:
-            exec_queue.append(child)
+        for child in node.children:
+            if child not in exec_queue:
+                exec_queue.append(child)

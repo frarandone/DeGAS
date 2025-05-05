@@ -63,7 +63,7 @@ class GaussianMix():
         return str_repr
     
     def comp(self, k):
-        return GaussianMix(torch.tensor([[1.]]), torch.clone(self.mu[:,k]), torch.clone(self.sigma[:,:,k]))
+        return GaussianMix(torch.tensor([[1.]]), torch.clone(self.mu[k,:].unsqueeze(0)), torch.clone(self.sigma[k,:,:].unsqueeze(0)))
         
     # Pdfs 
     def comp_pdf(self, x, k):
@@ -84,7 +84,7 @@ class GaussianMix():
                     self.sigma[k] = make_sym(self.sigma[k])
                 return torch.exp(distributions.MultivariateNormal(self.mu[k], covariance_matrix=self.sigma[k]).log_prob(x))
         else:
-            return torch.exp(distributions.Normal(self.mu[:,k], torch.sqrt(self.sigma[:,:,k])).log_prob(x)).reshape(x.shape)
+            return torch.exp(distributions.Normal(self.mu[k], torch.sqrt(self.sigma[k])).log_prob(x)).reshape(x.shape)
             
     def marg_comp_pdf(self, x, k, idx):
         if isinstance(idx, list):
@@ -110,7 +110,7 @@ class GaussianMix():
     
     def pdf(self, x):
         comp_pdfs = torch.stack([self.comp_pdf(x, k) for k in range(self.n_comp())], dim=1)
-        pdf = torch.matmul(comp_pdfs, self.pi.view(-1, 1))
+        pdf = torch.matmul(comp_pdfs.squeeze(2), self.pi.view(-1, 1))
         return pdf
         
     
@@ -253,7 +253,7 @@ def extend_dist(self, dist):
         new_sigmas = torch.empty((0,new_dim,new_dim))
         for part in product(*[range(len(mean)) for mean in self.aux_means]):                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
             # for each combination multiplies the original weight by the weights of the combination
-            aux_pi = torch.prod(torch.tensor([self.aux_pis[i][part[i]] for i in range(len(part))]))
+            aux_pi = torch.prod(torch.stack([self.aux_pis[i][part[i]] for i in range(len(part))]))
             new_pis = torch.vstack([new_pis, (aux_pi*dist.gm.pi)]) 
             # for each combination creates new means
             aux_mu = torch.hstack([self.aux_means[i][part[i]] for i in range(len(part))])
