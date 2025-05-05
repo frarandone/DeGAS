@@ -4,14 +4,12 @@ array[10] y;
 array[10] a10;
 array[10] a11;
 
-/* 
 w100 = gm([1.], [_mu100], [_sigma100]);
 w101 = gm([1.], [_mu101], [_sigma101]);
 w110 = gm([1.], [_mu110], [_sigma110]);
 w111 = gm([1.], [_mu111], [_sigma111]);
 w300 = gm([1.], [_mu300], [_sigma300]);
 w310 = gm([1.], [_mu310], [_sigma310]); 
-*/
 
 w100 = gm([1.], [0.], [0.1]);
 w101 = gm([1.], [0.], [0.1]);
@@ -38,14 +36,14 @@ for i in range(10) {
         a11[i] = gauss(0., 0.01);
     } else {
         skip;
-    } end if;         
+    } end if;        
+    prune(1000); 
 } end for;
 
-/* 
 
 for j in range(5) {
     y[j] = w300 * a10[j]; 
     y[j] = y[j] + a11[j]*w310;
     y[j] = y[j] + gauss(0., 0.5);       
 } end for;
-*/
+

@@ -64,9 +64,9 @@ def ranking_prune(current_dist, Kmax):
     """ Keeps only the Kmax component with higher prob"""
     if current_dist.gm.n_comp() > Kmax:
         rank = torch.argsort(current_dist.gm.pi, dim=0, descending=True)
-        current_dist.gm.pi = current_dist.gm.pi[rank].squeeze(1)[:2]
-        current_dist.gm.mu = current_dist.gm.mu[rank].squeeze(1)[:2]
-        current_dist.gm.sigma = current_dist.gm.sigma[rank].squeeze(1)[:2]
+        current_dist.gm.pi = current_dist.gm.pi[rank].squeeze(1)[:Kmax]
+        current_dist.gm.mu = current_dist.gm.mu[rank].squeeze(1)[:Kmax]
+        current_dist.gm.sigma = current_dist.gm.sigma[rank].squeeze(1)[:Kmax]
         current_dist.gm.pi = current_dist.gm.pi/torch.sum(current_dist.gm.pi)
     return current_dist
 
