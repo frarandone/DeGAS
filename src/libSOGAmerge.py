@@ -57,7 +57,58 @@ def prune(current_dist, pruning, Kmax):
         current_dist = classic_prune(current_dist, Kmax)
     elif pruning == 'ranking':
         current_dist = ranking_prune(current_dist, Kmax)
+    elif pruning == 'kmeans':
+        current_dist = kmeans_prune(current_dist, Kmax)
     return current_dist
+
+
+def kmeans_prune(output_dist, Kmax):
+    """ Partitions the mean vectors of output_dist using the k-means clustering algorithm and then substitutes each cluster with a single Gaussian component. """
+    
+    if output_dist.gm.n_comp() <= Kmax:
+        return output_dist
+    else:
+        labels, _ = k_means(torch.clone(output_dist.gm.mu), Kmax)
+
+        d = output_dist.gm.n_dim()
+
+        # computes the new weights
+        new_pis = torch.zeros(Kmax, 1)
+        new_pis.scatter_add_(0, labels.view(-1, 1), output_dist.gm.pi)   # these are the weights of the new mixture
+        normalized_pis = output_dist.gm.pi / new_pis[labels] # these are the weights normalized for each cluster
+
+        # computes the new means
+        weighted_mus = output_dist.gm.mu * normalized_pis
+        new_mus = torch.zeros(Kmax, d)
+        new_mus.scatter_add_(0, labels.view(-1, 1).expand(-1, d), weighted_mus)  # these are the means of the new mixture
+
+        # computes the new covariances
+        diff = output_dist.gm.mu - new_mus[labels]
+        weighted_sigmas = normalized_pis.view(-1, 1, 1) * output_dist.gm.sigma + torch.einsum('bi,bj->bij', diff, diff) * normalized_pis.view(-1, 1, 1)
+        new_sigmas = torch.zeros(Kmax, d, d)
+        new_sigmas.scatter_add_(0, labels.view(-1, 1, 1).expand(-1, d, d), weighted_sigmas)
+
+        return Dist(output_dist.var_list, GaussianMix(new_pis, new_mus, new_sigmas))
+
+
+def k_means(points, k, max_iters=100, tol=1e-4):
+    # Randomly initialize k cluster centers
+    c, d = points.shape
+    centers = points[torch.randperm(c)[:k]]
+
+    for _ in range(max_iters):
+        # Compute distances from points to centers
+        distances = torch.cdist(points, centers)
+        # Assign each point to the nearest center
+        labels = torch.argmin(distances, dim=1)
+        # Compute new centers as the mean of assigned points
+        new_centers = torch.stack([points[labels == i].mean(dim=0) for i in range(k)])
+        # Check for convergence
+        if torch.all(torch.abs(new_centers - centers) < tol):
+            break
+        centers = new_centers
+
+    return labels, centers
 
 
 def ranking_prune(current_dist, Kmax):
