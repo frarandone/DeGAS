@@ -4,15 +4,6 @@ array[10] y;
 array[10] a10;
 array[10] a11;
 
-w1 = gm([1.], [_muw1], [_sigmaw1]);
-w2 = gm([1.], [_muw2], [_sigmaw2]);
-w3 = gm([1.], [_muw3], [_sigmaw3]);
-w4 = gm([1.], [_muw4], [_sigmaw4]);
-b1 = gm([1.], [_mub1], [_sigmab1]);
-b2 = gm([1.], [_mub2], [_sigmab2]); 
-b3 = gm([1.], [_mub3], [_sigmab3]); 
-
-/*
 w1 = gm([1.], [_muw1], [0.2]);
 w2 = gm([1.], [_muw2], [0.2]);
 w3 = gm([1.], [_muw3], [0.2]);
@@ -20,7 +11,6 @@ w4 = gm([1.], [_muw4], [0.2]);
 b1 = gm([1.], [_mub1], [0.2]);
 b2 = gm([1.], [_mub2], [0.2]); 
 b3 = gm([1.], [_mub3], [0.2]); 
-*/
 
 for i in range(10) {
     
@@ -46,7 +36,7 @@ for i in range(10) {
     p2 = w4 * a11[i];
     y[i] = p1+p2+b3;
 
-    y[i] = y[i] + gauss(0., 0.1);    
+    y[i] = y[i] + gauss(0., 0.5);    
 
     prune(1500);
 
