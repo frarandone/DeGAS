@@ -62,8 +62,7 @@ def start_SOGA(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=None,
 
 def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
 
-    #print('Entering', node)
-    #if node.dist:
+    #print('Entering', node)        
     #    print(node.dist.gm.n_comp(), ' components')
     #    print(check_dist_non_deg(node.dist))
     #    print(node.dist)
@@ -140,7 +139,7 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
             p, current_dist = truncate(current_dist, current_trunc, data, params_dict)     ### see libSOGAtruncate
             current_trunc = None
             current_p = p*current_p
-        #print('After truncation:')
+
         #print('current_p: ', current_p)
         #print('mean: ', current_dist.gm.mean())
         #print('cov: ', current_dist.gm.cov())
@@ -151,7 +150,7 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
             expr = node.expr
         if current_p > TOL_PROB:
             current_dist = update_rule(current_dist, expr, data, params_dict)         ### see libSOGAupdate
-        #print('After update:')
+            
         #print('mean: ', current_dist.gm.mean())
         #print('cov: ', current_dist.gm.cov())
         #print('\n')

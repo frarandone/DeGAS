@@ -1,8 +1,6 @@
 data X = [-1.0000, -0.7778, -0.5556, -0.3333, -0.1111,  0.1111,  0.3333,  0.5556, 0.7778,  1.0000];
 
 array[10] y;
-array[10] a10;
-array[10] a11;
 
 w1 = gm([1.], [_muw1], [_sigmaw1]);
 w2 = gm([1.], [_muw2], [_sigmaw2]);
@@ -24,26 +22,26 @@ b3 = gm([1.], [_mub3], [0.2]);
 
 for i in range(10) {
     
-    a10[i] = w1 * X[i]; 
-    a10[i] = a10[i] + b1;
+    a10 = w1 * X[i]; 
+    a10 = a10 + b1;
 
-    a11[i] = w2 * X[i]; 
-    a11[i] = a11[i] + b2;
+    a11 = w2 * X[i]; 
+    a11 = a11 + b2;
      
-    if a10[i] < 0.0 {
-        a10[i] = gauss(0., 0.01);
+    if a10 < 0.0 {
+        a10 = gauss(0., 0.01);
     } else {
         skip;
     } end if;
 
-    if a11[i] < 0. {
-        a11[i] = gauss(0., 0.01);
+    if a11 < 0. {
+        a11 = gauss(0., 0.01);
     } else {
         skip;
     } end if;        
     
-    p1 = w3 * a10[i]; 
-    p2 = w4 * a11[i];
+    p1 = w3 * a10; 
+    p2 = w4 * a11;
     y[i] = p1+p2+b3;
 
     y[i] = y[i] + gauss(0., 0.1);    

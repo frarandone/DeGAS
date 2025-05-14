@@ -453,7 +453,6 @@ def prob(mu, sigma, a, b, idx=0):
     hyper-rectangle [a,b].
     Even for one-dimensional distributions, mu, sigma, a, b must be vectors.
     """ 
-    
     norm = distributions.Normal(loc=mu[:,idx], scale=torch.sqrt(sigma[:,idx,idx]))
     P = norm.cdf(b[idx]) - norm.cdf(a[idx])
     return P
