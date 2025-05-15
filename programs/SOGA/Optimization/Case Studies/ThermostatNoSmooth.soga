@@ -1,6 +1,6 @@
 array[11] T;
 
-currT = 16;             
+currT = 17;             
 isOn = -1;          
 
 for i in range(11) {
