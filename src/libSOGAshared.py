@@ -114,9 +114,9 @@ class GaussianMix():
         return pdf
         
     
-    def marg_pdf(self, x, idx):
-        comp_pdfs = torch.stack([self.marg_comp_pdf(x, k,idx) for k in range(self.n_comp())], dim=1)
-        pdf = torch.matmul(comp_pdfs, self.pi)
+    def marg_pdf(self, x, idx):  
+        comp_pdfs = torch.stack([self.marg_comp_pdf(x, k,idx) for k in range(self.n_comp())], dim=1) # (n, c)
+        pdf = torch.matmul(comp_pdfs, self.pi) # (1, c) * (c, 1) = (1, 1)
         return torch.sum(pdf, dim=1)
         
     # Cdfs

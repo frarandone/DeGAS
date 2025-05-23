@@ -1,29 +1,31 @@
 array[11] T;
 
-currT = gauss(16, 0.01);          /* smoothing added here */     
-isOn = gauss(-1, 0.01);           /* smoothing added here */
+currT = 17;             
+isOn = -1;          
 
 for i in range(11) {
 
-    T[i] = currT + gauss(0., 0.05);           /* smoothing added here */
+    T[i] = currT;           
 
+    /* Temperature update */
     if isOn > 0 {
-        newT = 0.99*currT + 0.5 + gauss(0., 0.5);
+        newT = 0.99*currT + 0.5 + gauss(0., 0.1);
     } else {
-        newT = 0.99*currT + gauss(0., 0.5);
+        newT = 0.99*currT + gauss(0., 0.1);
     } end if;
 
-    currT = newT + gauss(0., 0.05);          /* smoothing added here */
+    currT = newT;         
 
+    /* Check on thermostat */
     if isOn > 0 {
         if newT > _tOff {
-            isOn = gauss(-1, 0.01);          /* smoothing added here */
+            isOn = -1;          
         } else {
             skip;
         } end if;
     } else {
         if newT < _tOn {
-            isOn = gauss(1, 0.01);          /* smoothing added here */
+            isOn = 1;          
         } else {
             skip;
         } end if;
@@ -31,4 +33,4 @@ for i in range(11) {
 
 } end for;
 
-T[10] = currT + gauss(0., 0.05);          /* smoothing added here */
+T[10] = currT;         

@@ -1,12 +1,12 @@
 array[21] v;
 
-w = gauss(0, 0.01);              /* smoothing added here */     
-gear = gauss(1, 0.01);           /* smoothing added here */
-currV = gauss(5, 0.01);         /* smoothing added here */
+w = 0;             
+gear = 1;           
+currV = 5;         
 
 for i in range(21) {
 
-    v[i] = currV + gauss(0., 0.05);           /* smoothing added here */
+    v[i] = currV;          
 
     if gear > 0.5 {
         newV = 1.078*currV + 0.1*gauss(5., 1.);
@@ -16,23 +16,23 @@ for i in range(21) {
         newV = currV - newV + gauss(0, 1.);
     } end if;
 
-    currV = newV + gauss(0., 0.05);          /* smoothing added here */
+    currV = newV;         
 
     if gear > 0.5 {
         if gear < 1.5 {
-            if currV > _s1 {
-                nxt = gear + 1 + gauss(0, 0.05);     /* smoothing added here */
-                gear = gauss(0, 0.01);               /* smoothing added here */
-                w = gauss(0.3, 0.01);                /* smoothing added here */
+            if newV > _s1 {
+                nxt = gear + 1;     
+                gear = 0;               
+                w = 0.3;               
             } else {
                 skip;
             } end if;
         } else {
             if gear < 2.5 {
-                if currV > _s2 {
-                    nxt = gear + 1 + gauss(0, 0.005);   /* smoothing added here */
-                    gear = gauss(0, 0.01);              /* smoothing added here */
-                    w = gauss(0.3, 0.01);               /* smoothing added here */
+                if newV > _s2 {
+                    nxt = gear + 1;  
+                    gear = 0;             
+                    w = 0.3;               
                 } else {
                     skip;
                 } end if;
@@ -42,13 +42,15 @@ for i in range(21) {
         } end if;
     } else {
         if w < 0.05 {
-            gear = nxt + gauss(0, 0.05);              /* smoothing added here */
+            gear = nxt;             
         } else {
             skip;
         } end if;
     } end if;
 
     w = w - 0.1;
+
+    v[i] = v[i] + gauss(0., 0.5);
 
 } end for;
                     
