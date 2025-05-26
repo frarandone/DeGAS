@@ -1,7 +1,10 @@
 array[11] T;
 
 currT = 17;             
-isOn = -1;          
+isOn = -1;       
+
+tOn = gm([1.], [_tOnMean], [2.]);
+tOff = gm([1.], [_tOffMean], [2.]);
 
 for i in range(11) {
 
@@ -18,13 +21,13 @@ for i in range(11) {
 
     /* Check on thermostat */
     if isOn > 0 {
-        if newT > _tOff {
+        if newT - tOff > 0 {
             isOn = -1;          
         } else {
             skip;
         } end if;
     } else {
-        if newT < _tOn {
+        if newT - tOn < 0 {
             isOn = 1;          
         } else {
             skip;
