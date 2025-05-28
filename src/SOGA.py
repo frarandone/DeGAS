@@ -113,7 +113,7 @@ def printOutput(output_dict,preprocTime,cfgTime,smoothTime,sogaTime,args):
 				print('E['+var+']:', np.round(val,5))
 		else:
 			for var in args.vars:
-				i = output_dict[var_list].index(var)
+				i = output_dict['var_list'].index(str(var))
 				print('E['+var+']:', np.round(output_dict['mean'][i], 5))
 				var_idx.append(i)
 		print('\n')
