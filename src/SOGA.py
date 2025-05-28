@@ -191,7 +191,6 @@ def SOGA():
 		cfgTime=f"{cfg_end-cfg_start:<.3f}"
 		smoothTime=f"{smooth_end-smooth_start:<.3f}"
 		sogaTime=f"{comp_end-comp_start:<.3f}"
-		print('I am here')
 		printOutput(output_dict=output_dict,preprocTime=preprocTime
 			,cfgTime=cfgTime,smoothTime=smoothTime,sogaTime=sogaTime,args=args)
 	except queue.Empty as error:
