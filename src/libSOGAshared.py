@@ -165,6 +165,127 @@ class GaussianMix():
         self.mu = self.mu[indexes[0], :]
         self.sigma = self.sigma[indexes[0], :, :]
 
+class GaussianMixGPU():
+    """ A Gaussian Mixtures is represented by a list of mixing coefficients (stored in pi), a list of means (stored in mu) and a list of covariance matrices (stored in sigma)."""
+    
+    def __init__(self, pi, mu, sigma):
+        self.pi = pi.cuda()         # pi is a tensor (c, 1) where c is the number of components
+        self.mu = mu.cuda()         # mu is a tensor (c, d) where d is the dimension of the space
+        self.sigma = sigma.cuda()   # sigma is a tensor (c, d, d) where d is the dimension of the space
+    
+    def n_comp(self):
+        return self.pi.shape[0]
+    
+    def n_dim(self):
+        return self.mu.shape[1]
+    
+    def __repr__(self):
+        str_repr = 'pi: ' + str(self.pi) + '\nmu: ' + str(self.mu) + '\nsigma: ' + str(self.sigma)
+        return str_repr
+    
+    def comp(self, k):
+        return GaussianMixGPU(torch.tensor([[1.]]), torch.clone(self.mu[k,:].unsqueeze(0)), torch.clone(self.sigma[k,:,:].unsqueeze(0)))
+        
+    # Pdfs 
+    def comp_pdf(self, x, k):
+        if self.n_dim() > 1:
+            try:
+                return torch.exp(distributions.MultivariateNormal(self.mu[k], covariance_matrix=self.sigma[k]).log_prob(x))
+            except ValueError:
+                sigma = self.sigma[k]
+                eigs, _ = torch.linalg.eigh(sigma)
+                is_psd = torch.all(eigs > 0)
+                is_sym = torch.all(sigma == sigma.T)
+                if not is_psd:
+                    print(eigs)
+                    print('matrix is not psd!')
+                    print(sigma)
+                    raise 
+                if not is_sym:
+                    self.sigma[k] = make_sym(self.sigma[k])
+                return torch.exp(distributions.MultivariateNormal(self.mu[k], covariance_matrix=self.sigma[k]).log_prob(x))
+        else:
+            return torch.exp(distributions.Normal(self.mu[k], torch.sqrt(self.sigma[k])).log_prob(x)).reshape(x.shape)
+            
+    def marg_comp_pdf(self, x, k, idx):
+        if isinstance(idx, list):
+            cov_submatrix = torch.clone(self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)])
+            try:
+                return torch.exp(distributions.MultivariateNormal(self.mu[k][idx], cov_submatrix).log_prob(x))
+            except ValueError:
+                eigs, _ = torch.linalg.eigh(cov_submatrix)
+                is_psd = torch.all(eigs > 0)
+                is_sym = torch.all(cov_submatrix == cov_submatrix.T)
+                if not is_psd:
+                    print(eigs)
+                    print('matrix k={} is not psd!'.format(k))
+                    print(cov_submatrix)
+                    raise 
+                if not is_sym:
+                    print('matrix k={} is not symmetric!'.format(k))
+                    self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)] = new_cov_submatrix = make_sym(cov_submatrix)
+                return torch.exp(distributions.MultivariateNormal(self.mu[k][idx], covariance_matrix=new_cov_submatrix).log_prob(x))
+        else:
+            return torch.exp(distributions.Normal(self.mu[k][idx], torch.sqrt(self.sigma[k][idx,idx])).log_prob(x))
+
+    
+    def pdf(self, x):
+        comp_pdfs = torch.stack([self.comp_pdf(x, k) for k in range(self.n_comp())], dim=1)
+        pdf = torch.matmul(comp_pdfs.squeeze(2), self.pi.view(-1, 1))
+        return pdf
+        
+    
+    def marg_pdf(self, x, idx):
+        comp_pdfs = torch.stack([self.marg_comp_pdf(x, k,idx) for k in range(self.n_comp())], dim=1)
+        pdf = torch.matmul(comp_pdfs, self.pi)
+        return pdf
+        
+    # Cdfs
+    
+    def comp_cdf(self, x, k):
+        if self.n_dim() > 1:
+            return mvncdf(x, self.mu[k], self.sigma[k])
+        else:
+            return distributions.Normal(self.mu[k], torch.sqrt(self.sigma[k])).cdf(x)
+            
+    def marg_comp_cdf(self, x, k, idx):
+        if isinstance(idx, list):
+            cov_submatrix = torch.clone(self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)])
+            return mvncdf(x, self.mu[k][idx], cov_submatrix)
+        else:
+            return distributions.Normal(self.mu[k][idx], torch.sqrt(self.sigma[k][idx,idx])).cdf(x)
+        
+    
+    def cdf(self, x):
+        comp_cdfs = torch.stack([self.comp_cdf(x, k) for k in range(self.n_comp())], dim=1)
+        cdf = torch.matmul(comp_cdfs, self.pi.view(-1, 1))
+        return cdf
+    
+    def marg_cdf(self, x, idx):
+        comp_cdfs = torch.stack([self.marg_comp_cdf(x, k, idx) for k in range(self.n_comp())], dim=1)
+        cdf = torch.matmul(comp_cdfs, self.pi.view(-1, 1))
+        return cdf
+      
+    
+    # Moments of mixtures
+    def mean(self):
+        return torch.sum(self.pi * self.mu, dim=0)
+    
+    def cov(self):
+        pi = self.pi.view(-1, 1, 1)  
+        v = self.mu - self.mean()
+        cov = (pi * self.sigma).sum(dim=0) + torch.mm(v.t(), self.pi*v)
+        return cov
+    
+    # utilities 
+
+    def delete_zeros(self):
+        indexes = torch.where(self.pi >= TOL_PROB)
+        self.pi = self.pi[indexes].reshape(-1,1)
+        self.pi = self.pi/torch.sum(self.pi)
+        self.mu = self.mu[indexes[0], :]
+        self.sigma = self.sigma[indexes[0], :, :]
+
 
 class Dist():
     """ A distribution is given by a ordered list of variable names, stored in var_list, and a Gaussian Mixture, stored in gm, describing the joint distribution over the variable vector"""
@@ -177,6 +298,21 @@ class Dist():
     
     def __repr__(self):
         return str(self)
+    
+class DistGPU():
+    """ A distribution is given by a ordered list of variable names, stored in var_list, and a Gaussian Mixture, stored in gm, describing the joint distribution over the variable vector"""
+    def __init__(self, var_list, gm):
+        self.var_list = var_list
+        self.gm = gm
+        
+    def __str__(self):
+        return 'Dist<{},{}>'.format(self.var_list, self.gm)
+    
+    def __repr__(self):
+        return str(self)
+
+    def get_device(self):
+        return self.gm.pi.get_device()
 
 ### CDF FUNCTION OF MULTIVARIATE GAUSSIAN
 
@@ -238,34 +374,70 @@ class TruncatedNormal():
         prod_beta = self.beta * self.phi_beta
         prod_alpha = self.alpha * self.phi_alpha  
         return (self.scale.squeeze(2)**2*(torch.tensor(1.) - (prod_beta - prod_alpha)/self.norm_const - ((self.phi_alpha - self.phi_beta)/self.norm_const)**2)).unsqueeze(2)
-    
+
+class TruncatedNormalGPU():
+    """ Univariate Truncated Normal distribution. Helps computing moments using torch utils."""
+
+    def __init__(self, loc, scale, a, b):
+        self.loc = loc
+        self.scale = scale
+        self.low_bound = a
+        self.up_bound = b
+
+        # auxiliary normal
+        self.norm = distributions.Normal(torch.zeros(self.loc.shape), torch.ones(self.scale.squeeze(2).shape))
+
+        # rescaled bounds
+        self.alpha = (self.low_bound - self.loc)/(self.scale.squeeze(2))
+        self.beta = (self.up_bound - self.loc)/(self.scale.squeeze(2))
+        self.phi_alpha = self.norm.log_prob(self.alpha).exp()
+        self.phi_beta = self.norm.log_prob(self.beta).exp()
+
+        # normalization constant
+        self.norm_const = self.norm.cdf(self.beta) - self.norm.cdf(self.alpha)
+    # mean
+    def mean(self):
+        return self.loc + self.scale.squeeze(2)*(self.phi_alpha - self.phi_beta)/self.norm_const
+
+    # variance
+    def var(self):
+        prod_beta = self.beta * self.phi_beta
+        prod_alpha = self.alpha * self.phi_alpha  
+        return (self.scale.squeeze(2)**2*(torch.tensor(1.) - (prod_beta - prod_alpha)/self.norm_const - ((self.phi_alpha - self.phi_beta)/self.norm_const)**2)).unsqueeze(2)
+
 ### FUNCTIONS FOR PARSING
 
 def extend_dist(self, dist):
     """ Extends the current distribution with the auxiliary variables. Returns a new GaussianMix object."""
+    device = dist.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
+
 
     if len(self.aux_pis) > 0:
         old_dim = dist.gm.n_dim()
         new_dim = old_dim + len(self.aux_pis)
 
-        new_pis = torch.empty((0,1))
-        new_mus = torch.empty((0,new_dim))
-        new_sigmas = torch.empty((0,new_dim,new_dim))
+        new_pis = torch.empty((0,1)).to(device)
+        new_mus = torch.empty((0,new_dim)).to(device)
+        new_sigmas = torch.empty((0,new_dim,new_dim)).to(device)
         for part in product(*[range(len(mean)) for mean in self.aux_means]):                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
             # for each combination multiplies the original weight by the weights of the combination
             aux_pi = torch.prod(torch.stack([self.aux_pis[i][part[i]] for i in range(len(part))]))
             new_pis = torch.vstack([new_pis, (aux_pi*dist.gm.pi)]) 
             # for each combination creates new means
-            aux_mu = torch.hstack([self.aux_means[i][part[i]] for i in range(len(part))])
+            aux_mu = torch.hstack([self.aux_means[i][part[i]] for i in range(len(part))]).to(device)
             new_mus = torch.vstack([new_mus, torch.cat([dist.gm.mu, aux_mu.expand(dist.gm.n_comp(), len(aux_mu))], dim=1)])
             # for each combination creates new covs
             aux_sigma = torch.diag(torch.hstack([self.aux_covs[i][part[i]] for i in range(len(part))]))
-            aux_sigmas = torch.zeros((dist.gm.n_comp(), new_dim, new_dim))
+            aux_sigmas = torch.zeros((dist.gm.n_comp(), new_dim, new_dim)).to(device)
             aux_sigmas[:, :old_dim, :old_dim] = dist.gm.sigma
             aux_sigmas[:, old_dim:, old_dim:] = aux_sigma
             new_sigmas = torch.vstack([new_sigmas, aux_sigmas])
 
-        extended_gm = GaussianMix(new_pis, new_mus, new_sigmas)
+        extended_gm = GaussianMixGPU(new_pis, new_mus, new_sigmas)
         extended_gm.delete_zeros()
 
         return extended_gm

@@ -59,6 +59,33 @@ def start_SOGA(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=None,
     cfg.node_list['exit'].list_dist = []
     return current_dist
 
+def start_SOGAGPU(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=None,useR=False):
+    """ Invokes SOGA on the root of the CFG object cfg, initializing current_distribution to a Dirac delta centered in zero.
+        If pruning='classic' implements pruning at the merge nodes with maximum number of component Kmax.
+        Returns an object Dist (defined in libSOGAshared) with the final computed distribution."""
+    if(useR):
+        initR()
+
+    # initializes current_dist
+    var_list = cfg.ID_list
+    data = cfg.data
+    n_dim = len(var_list)
+    gm = GaussianMixGPU(torch.tensor([[1.]]), torch.zeros((1,n_dim)), EPS*torch.eye(n_dim).reshape(1,n_dim, n_dim))
+    init_dist = DistGPU(var_list, gm)
+    cfg.root.set_dist(init_dist)
+    
+    # initializes visit queue
+    exec_queue = [cfg.root]
+    
+    # executes SOGA on nodes on exec_queue
+    while(len(exec_queue)>0):
+        SOGA(exec_queue.pop(0), data, parallel, pruning, exec_queue, params_dict)
+    
+    # returns output distribution
+    p, current_dist = merge(cfg.node_list['exit'].list_dist)
+    cfg.node_list['exit'].list_dist = []
+    return current_dist
+
 
 def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
 
@@ -149,6 +176,13 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
         else:
             expr = node.expr
         if current_p > TOL_PROB:
+            # print(current_dist)
+            # print('-------------------')
+            # print(expr) # this is not on gpu
+            # print('-------------------')
+            # print(data) # this is none
+            # print('-------------------')
+            # print(params_dict)
             current_dist = update_rule(current_dist, expr, data, params_dict)         ### see libSOGAupdate
             
         #print('mean: ', current_dist.gm.mean())

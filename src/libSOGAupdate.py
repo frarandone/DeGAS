@@ -110,10 +110,24 @@ def update_rule(dist, expr, data, params_dict):
     if expr == 'skip':
         return dist
     else:
+        # print('update rule 1')
+        # print()
         rule_func = asgmt_parse(dist.var_list, expr, data, params_dict)  
+        # print('update rule 2')
+        # print(dist)
         return rule_func(dist)
     
 def add_func(self, dist):
+
+    device = dist.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
+
+    # dirty test
+    self.add_coeff = self.add_coeff.to(device)
+    self.add_const = self.add_const.to(device)
     
     i = self.target
     old_dim = dist.gm.n_dim()
@@ -121,13 +135,17 @@ def add_func(self, dist):
     # STEP 1: considers all possible combinations of components of the auxiliary variables
     extended_gm = extend_dist(self, dist)   # see libSOGAshared
 
+    # print(extended_gm.pi.get_device())
+    # print(self.add_coeff.get_device())
+    # print(self.add_const.get_device())
+
     # STEP 2: computes vectorially the new means and covariance matrices 
     extended_mu = torch.clone(extended_gm.mu)
     extended_mu[:, i] = torch.matmul(extended_gm.mu, self.add_coeff) + self.add_const
     extended_sigma = torch.clone(extended_gm.sigma)
     extended_sigma[:, i, :] = extended_sigma[:, :, i] = torch.matmul(self.add_coeff, extended_gm.sigma)
     extended_sigma[:, i, i] = torch.matmul(torch.matmul(self.add_coeff, extended_gm.sigma), self.add_coeff.reshape(-1,1)).flatten()  
-    new_dist = Dist(dist.var_list, GaussianMix(extended_gm.pi, extended_mu[:, :old_dim], extended_sigma[:, :old_dim, :old_dim]))
+    new_dist = DistGPU(dist.var_list, GaussianMixGPU(extended_gm.pi, extended_mu[:, :old_dim], extended_sigma[:, :old_dim, :old_dim]))
     new_dist.gm.delete_zeros()
     
     return new_dist
@@ -148,7 +166,7 @@ def mul_func(self, dist):
     extended_sigma = torch.clone(extended_gm.sigma)
     extended_sigma[:, i, :] = extended_sigma[:, :, i] = extended_gm.mu[:,j].reshape(-1, 1)*extended_gm.sigma[:,k,:] + extended_gm.mu[:,k].reshape(-1, 1)*extended_gm.sigma[:,j,:]
     extended_sigma[:, i, i] = torch.pow(extended_gm.sigma[:, j, k], 2)  + 2*extended_gm.sigma[:,j,k]*extended_gm.mu[:, j]*extended_gm.mu[:, k] + extended_gm.sigma[:,j,j]*extended_gm.sigma[:,k,k] + extended_gm.sigma[:,j,j]*torch.pow(extended_gm.mu[:,k], 2) + extended_gm.sigma[:,k,k]*extended_gm.mu[:,j]**2
-    new_dist = Dist(dist.var_list, GaussianMix(extended_gm.pi, extended_mu[:, :old_dim], extended_sigma[:, :old_dim, :old_dim]))
+    new_dist = DistGPU(dist.var_list, GaussianMixGPU(extended_gm.pi, extended_mu[:, :old_dim], extended_sigma[:, :old_dim, :old_dim]))
     new_dist.gm.delete_zeros()
 
     return new_dist
@@ -160,7 +178,7 @@ def const_func(self, dist):
     new_mu[:, i] = self.add_const*torch.ones(len(new_mu[:,i]))
     new_sigma = torch.clone(dist.gm.sigma)
     new_sigma[:, i, :] = new_sigma[:, :, i] = torch.zeros(new_sigma[:,:,i].shape)
-    new_dist = Dist(dist.var_list, GaussianMix(dist.gm.pi, new_mu, new_sigma))
+    new_dist = DistGPU(dist.var_list, GaussianMixGPU(dist.gm.pi, new_mu, new_sigma))
     return new_dist
             
 

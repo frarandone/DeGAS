@@ -49,7 +49,7 @@ def merge(list_dist):
     new_gm = GaussianMix(pi, mu, sigma)
     new_gm.delete_zeros()
     
-    return current_p, Dist(list_dist[0][1].var_list, new_gm)
+    return current_p, DistGPU(list_dist[0][1].var_list, new_gm)
 
 
 def prune(current_dist, pruning, Kmax):
@@ -88,7 +88,7 @@ def kmeans_prune(output_dist, Kmax):
         new_sigmas = torch.zeros(Kmax, d, d)
         new_sigmas.scatter_add_(0, labels.view(-1, 1, 1).expand(-1, d, d), weighted_sigmas)
 
-        return Dist(output_dist.var_list, GaussianMix(new_pis, new_mus, new_sigmas))
+        return DistGPU(output_dist.var_list, GaussianMix(new_pis, new_mus, new_sigmas))
 
 
 def k_means(points, k, max_iters=100, tol=1e-4):

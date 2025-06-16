@@ -50,7 +50,7 @@ def and_func(self, dist):
     new_pi = dist.gm.pi[indexes]*new_P.view(-1,1)
     norm_fact, norm_new_pi = normalize_weights(new_pi)
 
-    return norm_fact, Dist(dist.var_list, GaussianMix(norm_new_pi, new_mu, new_sigma))
+    return norm_fact, DistGPU(dist.var_list, GaussianMix(norm_new_pi, new_mu, new_sigma))
 
 
 def or_func(self, dist):
@@ -66,11 +66,17 @@ def or_func(self, dist):
     new_mu = torch.vstack([dist_low.gm.mu, dist_up.gm.mu])
     new_sigma = torch.vstack([dist_low.gm.sigma, dist_up.gm.sigma])
     norm_fact, norm_new_pi = normalize_weights(new_pi)
-    return norm_fact, Dist(dist.var_list, GaussianMix(norm_new_pi, new_mu, new_sigma))
+    return norm_fact, DistGPU(dist.var_list, GaussianMixGPU(norm_new_pi, new_mu, new_sigma))
 
 # version with no index selection
 def ineq_func(self, dist):
     """ Invoked when any inequality expression is encountered """
+
+    device = dist.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
 
     ineq_coeff = self.coeff
     ineq_const = self.const
@@ -84,7 +90,7 @@ def ineq_func(self, dist):
     norm = torch.linalg.norm(ineq_coeff)
     ineq_coeff = ineq_coeff/norm
     ineq_const = ineq_const/norm
-    A = find_basis(ineq_coeff)           
+    A = find_basis(ineq_coeff).to(device)          
     transl_mu = torch.matmul(A, extended_gm.mu.unsqueeze(2)).squeeze(2)
     transl_sigma = torch.matmul(torch.matmul(A, extended_gm.sigma), A.t())
     transl_alpha = torch.zeros(len(ineq_coeff))
@@ -93,8 +99,8 @@ def ineq_func(self, dist):
     # I suppressed the parts in which we truncate only some variables
         
     # STEP 2: creates the hyper-rectangle to integrate on
-    a = torch.ones(len(transl_alpha))*(-INFTY)
-    b = torch.ones(len(transl_alpha))*(INFTY)
+    a = (torch.ones(len(transl_alpha))*(-INFTY)).to(device)
+    b = (torch.ones(len(transl_alpha))*(INFTY)).to(device)
     if self.type=='>' or self.type=='>=':
         a[0] = ineq_const
     if self.type=='<' or self.type=='<=':
@@ -118,7 +124,7 @@ def ineq_func(self, dist):
     new_pi = extended_gm.pi[indexes]*new_P.view(-1,1)
     norm_fact, norm_new_pi = normalize_weights(new_pi)
 
-    return norm_fact, Dist(dist.var_list, GaussianMix(norm_new_pi, new_mu, new_sigma))
+    return norm_fact, DistGPU(dist.var_list, GaussianMixGPU(norm_new_pi, new_mu, new_sigma))
 
 
 def eq_func(self, dist):
@@ -153,7 +159,7 @@ def eq_func(self, dist):
     C[:, :, mask] = cond_sigma
     new_cond_sigma[:, mask, :] = C
     new_cond_sigma[:, obs_idx, obs_idx] = torch.ones(cond_sigma.shape[0])*SMOOTH_EPS
-    return norm_fact, Dist(dist.var_list, GaussianMix(norm_new_pi, new_cond_mu, new_cond_sigma))
+    return norm_fact, DistGPU(dist.var_list, GaussianMixGPU(norm_new_pi, new_cond_mu, new_cond_sigma))
 
 
 def negate(trunc):
@@ -460,7 +466,21 @@ def prob(mu, sigma, a, b, idx=0):
 
 def compute_mom1(mu, sigma, a, b, trunc, P, idx=0):
 
-    c = torch.zeros(mu.shape)
+    assert mu.get_device() == sigma.get_device() == a.get_device() == b.get_device()
+    device = mu.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
+
+    # print(mu)
+    # print(sigma)
+    # print(a)
+    # print(b)
+    # print(trunc)
+    # print(P)
+
+    c = torch.zeros(mu.shape).to(device)
     norm = distributions.Normal(mu[:,idx], scale=torch.sqrt(sigma[:,idx,idx]))
     if trunc:
         if trunc == 'low':
@@ -473,18 +493,26 @@ def compute_mom1(mu, sigma, a, b, trunc, P, idx=0):
         return mu + torch.matmul(sigma, c.unsqueeze(2)).squeeze(2)/P.view(-1,1) 
 
 def compute_mom2(mu, sigma, a, b, trunc, new_P, new_mu, muj):
+
+    assert mu.get_device() == sigma.get_device() == a.get_device() == b.get_device() == muj.get_device()
+    device = mu.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
+
     # vector dimensions
     n = len(a)    # number of variables
     c = mu.shape[0] # number of components
     # creates auxialiary vectors
-    e0 = torch.zeros((c,n))
+    e0 = torch.zeros((c,n)).to(device)
     e0[:,0] = torch.ones(c)
-    C = (new_P.view(c,1,1))*torch.eye(n).unsqueeze(0).expand(c,-1,-1)
+    C = (new_P.view(c,1,1))*torch.eye(n).to(device).unsqueeze(0).expand(c,-1,-1)
     norm = distributions.Normal(loc=mu[:,0], scale=torch.sqrt(sigma[:,0,0]))
     if trunc == 'low':
-        C[:,:,0] += norm.log_prob(a[0]).exp().view(-1,1)*(a[0]**e0)*torch.hstack((torch.ones((c,1)), muj))
+        C[:,:,0] += norm.log_prob(a[0]).exp().view(-1,1)*(a[0]**e0)*torch.hstack((torch.ones((c,1)).to(device), muj))
     elif trunc == 'up':
-        C[:,:,0] += -norm.log_prob(b[0]).exp().view(-1,1)*(b[0]**e0)*torch.hstack((torch.ones((c,1)), muj))
+        C[:,:,0] += -norm.log_prob(b[0]).exp().view(-1,1)*(b[0]**e0)*torch.hstack((torch.ones((c,1)).to(device), muj))
     # computes the new matrix
     new_sigma = new_P.view(c,1,1)*torch.matmul(mu.unsqueeze(2), new_mu.unsqueeze(1)) + torch.matmul(sigma, C.transpose(1,2))
     new_sigma = new_sigma/new_P.view(c,1,1) - torch.matmul(new_mu.unsqueeze(2), new_mu.unsqueeze(1))
