@@ -1,52 +1,59 @@
-data X = [-1.0000, -0.7778, -0.5556, -0.3333, -0.1111,  0.1111,  0.3333,  0.5556, 0.7778,  1.0000];
-
-array[10] y;
-
 w1 = gm([1.], [_muw1], [_sigmaw1]);
 w2 = gm([1.], [_muw2], [_sigmaw2]);
 w3 = gm([1.], [_muw3], [_sigmaw3]);
 w4 = gm([1.], [_muw4], [_sigmaw4]);
+w5 = gm([1.], [_muw5], [_sigmaw5]);
+w6 = gm([1.], [_muw6], [_sigmaw6]);
+w7 = gm([1.], [_muw7], [_sigmaw7]);
+w8 = gm([1.], [_muw8], [_sigmaw8]);
 b1 = gm([1.], [_mub1], [_sigmab1]);
 b2 = gm([1.], [_mub2], [_sigmab2]); 
 b3 = gm([1.], [_mub3], [_sigmab3]); 
-
-/*
-w1 = gm([1.], [_muw1], [0.2]);
-w2 = gm([1.], [_muw2], [0.2]);
-w3 = gm([1.], [_muw3], [0.2]);
-w4 = gm([1.], [_muw4], [0.2]);
-b1 = gm([1.], [_mub1], [0.2]);
-b2 = gm([1.], [_mub2], [0.2]); 
-b3 = gm([1.], [_mub3], [0.2]); 
-*/
-
-for i in range(10) {
+b4 = gm([1.], [_mub4], [_sigmab4]); 
+b5 = gm([1.], [_mub5], [_sigmab5]); 
     
-    a10 = w1 * X[i]; 
-    a10 = a10 + b1;
+a10 = _x * w1; 
+a10 = a10 + b1;
 
-    a11 = w2 * X[i]; 
-    a11 = a11 + b2;
-     
-    if a10 < 0.0 {
-        a10 = gauss(0., 0.01);
-    } else {
-        skip;
-    } end if;
+a11 = _x * w2; 
+a11 = a11 + b2;
 
-    if a11 < 0. {
-        a11 = gauss(0., 0.01);
-    } else {
-        skip;
-    } end if;        
+a12 = _x * w3; 
+a12 = a12 + b3;
+
+a13 = _x * w4; 
+a13 = a13 + b4;
     
-    p1 = w3 * a10; 
-    p2 = w4 * a11;
-    y[i] = p1+p2+b3;
+if a10 < 0.0 {
+    a10 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
 
-    y[i] = y[i] + gauss(0., 0.1);    
+if a11 < 0. {
+    a11 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
 
-    prune(1500);
+if a12 < 0. {
+    a12 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
 
-} end for;
+if a13 < 0. {
+    a13 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;        
+
+p1 = w5 * a10; 
+p2 = w6 * a11;
+p3 = w7 * a12;
+p4 = w8 * a13;
+
+y = p1+p2+ p3 + p4 + b5;
+
+y = y + gauss(0., 0.1);    
 
