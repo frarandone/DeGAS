@@ -1,9 +1,9 @@
-array[11] T;
+array[31] T;
 
-currT = 17;             
+currT = 16;             
 isOn = -1;          
 
-for i in range(11) {
+for i in range(31) {
 
     T[i] = currT;           
 
@@ -33,4 +33,8 @@ for i in range(11) {
 
 } end for;
 
-T[10] = currT;         
+T[30] = currT;  
+
+for i in range(30) {
+    T[i] = T[i] + gauss(0, 1);
+} end for;
