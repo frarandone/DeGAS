@@ -42,10 +42,13 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
     print('Optimization performed in ', round(total_end-total_start, 3))
 
 
-def generate_trajectories(orig_model, n_traj):
+def generate_trajectories(orig_model, n_traj, model_params=None):
     traj_set = []
     for _ in range(n_traj):
-        traj_set.append(orig_model())
+        if model_params:
+            traj_set.append(orig_model(**model_params))
+        else:
+            traj_set.append(orig_model())
     traj_set = torch.vstack(traj_set)
     return traj_set
 
@@ -62,6 +65,15 @@ def initialize_params(pars):
 def neg_log_likelihood(traj_set, dist, idx):
     log_likelihood = torch.log(dist.gm.marg_pdf(traj_set[:, idx], idx))
     return - torch.sum(log_likelihood)
+
+
+
+def L2_distance(traj_set, dist, idx):
+    idx = [1,2,3,4,5,6,7,8,9]
+    output_traj = dist.gm.mean()[idx]
+    return torch.sum(torch.pow(traj_set[:, idx] - output_traj,2))
+
+
 
 # used for PID
 def signal_error(dist, target=3.14, eps=0.1, T=50):

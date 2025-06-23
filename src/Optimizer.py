@@ -14,11 +14,12 @@ torch.set_default_dtype(torch.float64)
 
 from models import thermostat, gearbox, pid
 
-thermo_params = {'model': thermostat, 
-                 'n_traj': 50,
-                 'script': '../programs/SOGA/Optimization/CaseStudies/Thermostat.soga',
-                 'pars': {'tOff':22., 'tOn':16.},
-                 'loss': lambda dist : neg_log_likelihood(traj_set, dist, idx=[1,2,3,4,5,6,7,8,9])
+thermo_params = {'model': thermostat,     # name of the model to sample from in models.py
+                 'true_params': {'T':30, 'init_T':16., 'tOn':17., 'tOff':20.}, # true parameters for sampling
+                 'n_traj': 500,   # number of trajectories to sample
+                 'script': '../programs/SOGA/Optimization/CaseStudies/Thermostat.soga',   # path to the SOGA script
+                 'pars': {'tOff':22., 'tOn':15.},  # initial guess for the parameters to optimize
+                 'loss': lambda dist : neg_log_likelihood(traj_set, dist, idx=list(range(1,30))) # loss function
                  }
                  
 gearbox_params = {'model': gearbox,
@@ -45,6 +46,10 @@ if __name__ == '__main__':
     for model_name, model in model_list.items():
 
         orig_model = model['model']
+        if 'true_params' in model.keys():
+            true_params = model['true_params']
+        else:
+            true_params = None
         if 'n_traj' in model.keys():
             n_traj = model['n_traj']
         else:
@@ -61,7 +66,7 @@ if __name__ == '__main__':
         # These trajectories will be used to compute the loss when fitting the parameters of the thermostat system.
 
         if n_traj:
-            traj_set = generate_trajectories(orig_model, n_traj)
+            traj_set = generate_trajectories(orig_model, n_traj, model_params=true_params)
 
         ## SOGA Optimization
 
@@ -78,7 +83,7 @@ if __name__ == '__main__':
         initial_dist = start_SOGA(cfg, params_dict)
 
         # We run the optimization loop
-        optimize(cfg, params_dict, loss, n_steps=80)  # 80 is sufficient for the loss to converge
+        optimize(cfg, params_dict, loss, n_steps=100) 
 
         # We compute the output distribution for the final value of the parameters
         final_dist = start_SOGA(cfg, params_dict)
