@@ -31,6 +31,72 @@ from antlr4 import *
 from SOGALexer import *
 from SOGAParser import *
 from SOGAListener import *
+import copy
+import torch
+import torch.nn as nn
+
+import copy
+import torch
+import torch.nn as nn
+
+def safe_deepcopy(obj, memo):
+    """Deepcopy replacement that is safe for Tensors and nn.Modules."""
+    
+    # Already copied? return from memo
+    obj_id = id(obj)
+    if obj_id in memo:
+        return memo[obj_id]
+
+    # Torch Tensor → clone safely
+    if isinstance(obj, torch.Tensor):
+        result = obj.clone().detach()
+        memo[obj_id] = result
+        return result
+
+    # Torch Module → new instance with same weights
+    if isinstance(obj, nn.Module):
+        new_module = obj.__class__()  # assumes default constructor works
+        new_module.load_state_dict(obj.state_dict())
+        memo[obj_id] = new_module
+        return new_module
+
+    # Dict → deep copy keys & values
+    if isinstance(obj, dict):
+        result = {}
+        memo[obj_id] = result
+        for k, v in obj.items():
+            result[safe_deepcopy(k, memo)] = safe_deepcopy(v, memo)
+        return result
+
+    # List
+    if isinstance(obj, list):
+        result = [safe_deepcopy(x, memo) for x in obj]
+        memo[obj_id] = result
+        return result
+
+    # Tuple
+    if isinstance(obj, tuple):
+        result = tuple(safe_deepcopy(x, memo) for x in obj)
+        memo[obj_id] = result
+        return result
+
+    # Set
+    if isinstance(obj, set):
+        result = {safe_deepcopy(x, memo) for x in obj}
+        memo[obj_id] = result
+        return result
+
+    # Objects with __deepcopy__
+    if hasattr(obj, "__deepcopy__"):
+        result = obj.__deepcopy__(memo)
+        memo[obj_id] = result
+        return result
+
+    # Fallback: shallow copy
+    result = copy.copy(obj)
+    memo[obj_id] = result
+    return result
+
 
 class CFGnode:
     
@@ -377,6 +443,32 @@ class CFG(SOGAListener):
     def enterGm(self, ctx):
         pass
         #print("gm",ctx.getText()) 
+
+    def deepcopy(self):
+        """Return a fully independent deep copy of the CFG."""
+        return copy.deepcopy(self)
+
+    def __deepcopy__(self, memo):
+        new_cfg = CFG()
+        new_cfg.n_state = self.n_state
+        new_cfg.n_test = self.n_test
+        new_cfg.n_merge = self.n_merge
+        new_cfg.n_observe = self.n_observe
+        new_cfg.n_loop = self.n_loop
+        new_cfg.n_prune = self.n_prune
+
+        new_cfg.data = safe_deepcopy(self.data, memo)
+        new_cfg.node_list = safe_deepcopy(self.node_list, memo)
+        new_cfg.ID_list = safe_deepcopy(self.ID_list, memo)
+        new_cfg._subroot = safe_deepcopy(self._subroot, memo)
+        new_cfg.smoothed_vars = safe_deepcopy(self.smoothed_vars, memo)
+
+        new_cfg.root = safe_deepcopy(self.root, memo)
+        new_cfg._current_node = safe_deepcopy(self._current_node, memo)
+        new_cfg._flag = safe_deepcopy(self._flag, memo)
+
+        return new_cfg
+
         
 def produce_cfg(filename):
     """ Parses filename using ANTLR4. Returns a CFG object. """

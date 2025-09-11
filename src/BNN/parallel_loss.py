@@ -48,7 +48,7 @@ def process_sample(j, X_data, Y_data, bnn_pars, cfg):
     xj = X_data.squeeze([-1,1])[sampled_index]
 
     #bnn_one_pars = bnn_pars.copy()
-    bnn_pars['x'] = xj.requires_grad_(True) 
+    bnn_pars['x'] = xj.requires_grad_(False) 
 
     current_dist = start_SOGA(cfg, bnn_pars, pruning='ranking')
     loss_j = neg_log_likelihood_one(yj, current_dist)
@@ -56,15 +56,13 @@ def process_sample(j, X_data, Y_data, bnn_pars, cfg):
     return loss_j
 
 def run_parallel(batch_size, X, Y, bnn_pars, cfg):
-    losses = []
     with ThreadPoolExecutor() as executor:
         futures = [
             executor.submit(process_sample, j, X, Y, bnn_pars, cfg)
             for j in range(batch_size)
         ]
-        for f in futures:
-            losses.append(f.result())
+        # collect results into a single tensor
+        losses = torch.stack([f.result() for f in futures])
 
-    total_loss = torch.sum(losses)
-    #total_loss.backward()  
+    total_loss = losses.sum()   # still a tensor
     return total_loss
