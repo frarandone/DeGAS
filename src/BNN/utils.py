@@ -374,7 +374,7 @@ def make_dataset(func_id: int, N: int, N_test: int, sigma: float):
     elif func_id == 4:  # MLP
         x_min, x_max = -3, 3
     elif func_id == 5:
-        x_min, x_max = -4, 4
+        x_min, x_max = -2, 2
     else:
         raise ValueError("func_id must be 1,2,3,4, or 5")
 
