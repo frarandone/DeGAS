@@ -13,6 +13,7 @@
 import torch
 import torch.distributions as distributions
 import botorch.utils.probability.mvnxpb as mvn
+from torch.distributions import MultivariateNormal, Categorical
 #from copy import deepcopy, copy
 
 #from sympy import *
@@ -164,6 +165,24 @@ class GaussianMix():
         self.pi = self.pi/torch.sum(self.pi)
         self.mu = self.mu[indexes[0], :]
         self.sigma = self.sigma[indexes[0], :, :]
+
+    def sample(self,n_samples=1):
+        weights = self.pi.squeeze()
+        mus = self.mu.squeeze()
+        covs = self.sigma.squeeze()
+        K, D = mus.shape
+        
+        # Step 1: choose components according to weights
+        categorical = Categorical(weights)
+        component_ids = categorical.sample((n_samples,))  # (n_samples,)
+        
+        # Step 2: sample from the corresponding multivariate Gaussians
+        samples = []
+        for k in component_ids:
+            dist = MultivariateNormal(mus[k], covs[k]+1e-6*torch.eye(D))  # add small value to diagonal for numerical stability
+            samples.append(dist.sample())
+        
+        return torch.stack(samples)
 
 
 class Dist():
