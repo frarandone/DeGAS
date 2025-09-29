@@ -65,14 +65,14 @@ def expr_is_prod(expr, vars):
 # SMOOTHING FUNCTION
 
 def smooth_asgmt_gm(var, expr, eps):
-    """ Smooths var = 'gm([], [], [])' adding gaussian noise to components with 0 variance. """
-    weights, mean, variances = extract_lists(var)
-    variances = variances.strip('[]').split(',')  # the problem is that one ore more variance could be a parameter
-    for i, variance in enumerate(variances):
-        if not '_' in variance and eval(variance) == 0:
-            variances[i] = f'{float(eps):.10f}'
-    variances = format_float_list(variances)
-    expr = expr.replace(var, 'gm({}, {}, {})'.format(weights, mean, variances))
+    """ var is a term 'gm([], [], [])'. Adds gaussian noise to components with 0 std. """
+    weights, mean, stds = extract_lists(var)
+    stds = stds.strip('[]').split(',')  # the problem is that one ore more stds could be a parameter
+    for i, std in enumerate(stds):
+        if not '_' in std and eval(std) == 0:
+            stds[i] = f'{float(eps):.10f}'
+    stds = format_float_list(stds)
+    expr = expr.replace(var, 'gm({}, {}, {})'.format(weights, mean, stds))
     return expr
 
     
@@ -86,7 +86,7 @@ def update_smoothed_vars(smoothed_vars, var_name, idx, var_list, data):
             if var.startswith(var_name) and '[' in var[len(var_name):]:   
                 if var not in smoothed_vars:
                     smoothed_vars.append(var)
-    else: # var_name is of type var_name[index] all variable var_name[index] are smoothed
+    else: # var_name is of type var_name[index] only var_name[index] is smoothed
         target = var_name + '[' + idx + ']'
         if target not in smoothed_vars:
             smoothed_vars.append(target)
@@ -97,7 +97,7 @@ def smooth_asgmt(node, var_list, smoothed_vars, data, smooth_eps):
     """ Smooths an assignment statement. There are three cases in which the assignment is smoothed:
     1. The assignment is a constant assignment (no variables).
     2. The assignment contains degenerate gm variables.
-    3. The assiggnment is a deterministic function of the other variables (no gm variables)."""
+    3. The assignment is a deterministic function of the other variables (no gm variables)."""
     
     orig_expr = node.expr
 
@@ -125,10 +125,10 @@ def smooth_asgmt(node, var_list, smoothed_vars, data, smooth_eps):
     # CASE 2: degenerate gm vars 
     if len(vars) > 0 and len(gm_vars) > 0:
         for gm in gm_vars:                         # only smooths if gm is degenerate
-            _, _, variances = extract_lists(gm)
-            variances = variances.strip('[]').split(',') 
-            for variance in variances:
-                if not '_' in variance and eval(variance) == 0:     # variances can be parameters
+            _, _, stds = extract_lists(gm)
+            stds = stds.strip('[]').split(',') 
+            for std in stds:
+                if not '_' in std and eval(std) == 0:     # stds can be parameters
                     new_orig_expr = smooth_asgmt_gm(gm, orig_expr, smooth_eps)
                     smoothed_vars = update_smoothed_vars(smoothed_vars, var_name, idx, var_list, data)
     # CASE 3: variables deterministically determined by the others (no gm_vars)
@@ -144,7 +144,7 @@ def smooth_asgmt(node, var_list, smoothed_vars, data, smooth_eps):
 # FUNCTIONS FOR SMOOTHING TRUNCATIONS
 
 def smooth_trunc(trunc, node, smoothed_vars, smooth_eps):
-    """ trunc is a truncation var ('==' | '!=') val.
+    """ trunc is a truncation var ('<'|'<='|'=='|'!='|'>='|'>') val.
     WARNING: the lhs must be a single variable (TO DO: deal with linear expressions at the l.h.s.).
     This functions transforms the conditions:
     > var == val -> var > val - delta and var < val + delta
@@ -174,7 +174,7 @@ def smooth_trunc(trunc, node, smoothed_vars, smooth_eps):
         return trunc 
         
     # currently selects delta as a constant function of epsilon. TO DO: make it a function of the distribution.
-    delta = 5*smooth_eps
+    delta = 5*smooth_eps   # maybe this should not be linear in smooth_eps (see Continualization)
 
     if ops == '==':
         new_trunc = '{} > {} - {:.10f} and {} < {} + {:.10f}'.format(target_var, target_val, delta, target_var, target_val, delta)

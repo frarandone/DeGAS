@@ -173,6 +173,8 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
         p, current_dist = truncate(current_dist, current_trunc, data, params_dict)                     ### see libSOGAtruncate
         #current_p = current_p*p
         current_trunc = None
+        if p < TOL_PROB:
+            print('Error: conditioning to zero probability event.')
         child = node.children[0]
         update_child(child, current_dist, current_p, current_trunc, exec_queue)
 
