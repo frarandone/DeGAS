@@ -4,6 +4,7 @@
 
 from libSOGAtruncate import negate
 import re
+import numpy as np
 
 # FUNCTIONS FOR STRING PARSING
 
@@ -135,7 +136,7 @@ def smooth_asgmt(node, var_list, smoothed_vars, data, smooth_eps):
     if len(vars) > 0 and len(gm_vars) == 0:
         if not expr_is_prod(orig_expr, vars) and not target_var in vars: # if the expression is not a product of two variables and the target variable is not in the expression
             new_orig_expr = orig_expr + '+ gm([1.], [0.], [{:.10f}])'.format(smooth_eps)
-            smoothed_vars = update_smoothed_vars(smoothed_vars, var_name, idx, var_list, data)
+            #smoothed_vars = update_smoothed_vars(smoothed_vars, var_name, idx, var_list, data)
     
     if new_orig_expr:
         node.smooth = new_orig_expr
@@ -174,7 +175,7 @@ def smooth_trunc(trunc, node, smoothed_vars, smooth_eps):
         return trunc 
         
     # currently selects delta as a constant function of epsilon. TO DO: make it a function of the distribution.
-    delta = 5*smooth_eps   # maybe this should not be linear in smooth_eps (see Continualization)
+    delta = 5*np.sqrt(smooth_eps)   # maybe this should not be linear in smooth_eps (see Continualization)
 
     if ops == '==':
         new_trunc = '{} > {} - {:.10f} and {} < {} + {:.10f}'.format(target_var, target_val, delta, target_var, target_val, delta)

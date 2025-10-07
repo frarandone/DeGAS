@@ -30,7 +30,7 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
         optimizer.step()
 
         # Print progress
-        if True:#i % int(n_steps/10) == 0:
+        if i % int(n_steps/10) == 0:
             out = ''
             for key in params_dict.keys():
                 out = out + key + ': ' + str(params_dict[key].item()) + ' '
