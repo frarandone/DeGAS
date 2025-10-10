@@ -191,9 +191,9 @@ def create_pid_pyro(initial_params, eps=0.5):
 
     def pid_pyro(observed_traj):
         # Sample parameters
-        s0 = pyro.sample("s0", dist.Normal(init_s0, 10.0))
-        s1 = pyro.sample("s1", dist.Normal(init_s1, 10.0))
-        s2 = pyro.sample("s2", dist.Normal(init_s2, 10.0))
+        s0 = pyro.sample("s0", dist.Normal(init_s0, 1.0))
+        s1 = pyro.sample("s1", dist.Normal(init_s1, 1.0))
+        s2 = pyro.sample("s2", dist.Normal(init_s2, 1.0))
 
         target = 3.14
         dt = 0.1
