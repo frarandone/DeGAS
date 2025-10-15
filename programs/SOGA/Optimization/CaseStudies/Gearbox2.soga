@@ -8,8 +8,10 @@ for i in range(21) {
 
     v[i] = currV;          
 
-    if gear > 0.5 {
-        newV = 1.078*currV + 0.1*gauss(5., 1.);
+    if gear > 0.8 {
+        newV = 1.078*currV;
+        temp = 0.1*gauss(5., 1.);
+        newV = newV + temp;
     } else {
         newV = currV*currV;
         newV = 0.00005*newV;
@@ -18,7 +20,7 @@ for i in range(21) {
 
     currV = newV;         
 
-    if gear > 0.5 {
+    if gear > 0. {
         if gear < 1.5 {
             if newV > _s1 {
                 nxt = gear + 1;     
@@ -41,7 +43,7 @@ for i in range(21) {
             } end if;
         } end if;
     } else {
-        if w < 0.05 {
+        if w < 0.1 {
             gear = nxt;             
         } else {
             skip;
@@ -49,8 +51,8 @@ for i in range(21) {
     } end if;
 
     w = w - 0.1;
-
     v[i] = v[i] + gauss(0., 0.5);
+    
 
 } end for;
                     

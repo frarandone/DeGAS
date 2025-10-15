@@ -59,7 +59,7 @@ def gearbox(T=20, init_v=5., gear=1, s1=10, s2=20):
             nxt = gear + 1
             gear = 0
             w = 0.3
-        elif gear == 0 and w < 0:
+        elif gear == 0 and w <= 0:
             gear = nxt
 
         w = w - 0.1            
@@ -100,6 +100,36 @@ def pid(T=50, init_ang = 0.5, s0=1, s1=1, s2=1):
 
     return traj
 
+def bouncing_ball(T=30, init_y=9., eps=0.1, R = 5.0, C = 0.0025, m = 7.0):
+
+    g = 9.81
+    #R = 5.0
+    #C = 0.0025 #thus 1/C = 400
+    #m = 7.0 #thus 1/m = 0.14
+    dt = 0.08
+    mode = -1.
+
+    traj = torch.zeros(T)
+    traj[0] = distributions.Normal(init_y, 1).rsample()
+    v = 0.
+
+    noise = distributions.Normal(torch.tensor(0.), torch.tensor(eps))
+
+    for i in range(1,T):
+        
+        if mode == -1.:
+            v = v - g*dt + noise.rsample()
+        else:
+            v = v - (g + ((R*v+traj[i-1]/C)/m))*dt + noise.rsample()
+        
+        traj[i] = traj[i-1] + v*dt + noise.rsample()
+
+        if traj[i] <= 0:
+            mode = 1.
+        else:
+            mode = -1.
+
+    return traj
 
 ### UTILS
 

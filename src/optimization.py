@@ -8,13 +8,14 @@ from smoothcfg import *
 from libSOGA import *
 
 # The function optimize performs the optimization of the parameters using the Adam optimizer.
-def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
+def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=True):
 
     # creates the optimizer, passing the parameters of the program as the parameters to optimize
     optimizer = torch.optim.Adam([params_dict[key] for key in params_dict.keys()], lr=lr)
 
     total_start = time()
     loss_list = []
+    number_of_iterations = n_steps
     for i in range(n_steps):
 
         optimizer.zero_grad()  # Reset gradients
@@ -23,6 +24,14 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
         current_dist = start_SOGA(cfg, params_dict)     # we compute the output distribution for the current values of the parameters using start_SOGA
         loss = loss_func(current_dist)        # we compute the loss using the set of trajectories and the current output distribution
         loss_list.append(loss.item())
+
+        # check for convergence within a tolerance of 1e-8 and wit a patience of 30 iterations
+        if i > 30 and abs(loss_list[-1] - loss_list[-2]) < 1e-8 and all(abs(loss_list[-j] - loss_list[-j-1]) < 1e-8 for j in range(2, 31)):
+            if print_progress:
+                print(f"Converged at iteration {i}")
+            number_of_iterations = i
+            break
+
         # Backpropagate
         loss.backward()
     
@@ -30,7 +39,7 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
         optimizer.step()
 
         # Print progress
-        if i % int(n_steps/100) == 0:
+        if print_progress: #i % int(n_steps/10) == 0:
             out = ''
             for key in params_dict.keys():
                 out = out + key + ': ' + str(params_dict[key].item()) + ' '
@@ -38,9 +47,9 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
             print(out)
 
     total_end = time()
-
-    print('Optimization performed in ', round(total_end-total_start, 3))
-    return loss_list
+    if print_progress:
+        print('Optimization performed in ', round(total_end-total_start, 3))
+    return loss_list, round(total_end-total_start, 3), number_of_iterations
 
 
 def generate_trajectories(orig_model, n_traj, model_params=None):

@@ -92,6 +92,237 @@ def get_program(name):
         } end if;
 
         """
+
+    elif name == "clinicaltrial":
+        x = '''    
+        probTreated = uniform([0,1],2);
+        probContr = uniform([0,1],2);
+        effect = uniform([0,1],2);
+        pc = _pc;
+
+        if effect < _pe {
+            pc = _pt;
+        } else {
+            skip;
+        } end if;
+
+        if probContr - pc < 0 {
+            ycontr = 1;
+        } else {
+            ycontr = 0;
+        } end if;
+
+        if probTreated < _pt {
+            ytreated = 1;
+        } else {
+            ytreated = 0;
+        } end if;
+        '''
+
+    elif name == "coinbias":
+        x = '''
+        bias = beta([_p1,_p2],2); 
+        if uniform([0,1],2) - bias < 0 {
+            y = 1;
+        } else {
+            y = 0;
+        } end if;
+        '''
+
+    elif name == "grass":
+        x = """
+        if uniform([0,1],2) <  _pcloudy {
+            rain = gm([0.8, 0.2], [1.,0.], [0.,0.]);
+            sprinkler = gm([0.1, 0.9], [1.,0.], [0.,0.]);
+        } else {
+            rain = gm([0.2, 0.8], [1.,0.], [0.,0.]);
+            sprinkler = gm([0.5, 0.5], [1.,0.], [0.,0.]);
+        } end if;
+
+        if uniform([0,1],2) < _p1 {
+            if rain == 1 {
+                wetRoof = 1;
+            } else {
+                wetRoof = 0;
+            } end if;
+        } else {
+            wetRoof = 0;
+        } end if;
+
+        if uniform([0,1],2) < _p2 {
+            if rain == 1 {
+                or1 = 1;
+            } else {
+                or1 = 0;
+            } end if;
+        } else {
+            or1 = 0;
+        } end if;
+
+        if uniform([0,1],2) < _p3 {
+            if sprinkler == 1 {
+                or2 = 1;
+            } else {
+                or2 = 0;
+            } end if;
+        } else {
+            or2 = 0;
+        } end if;
+
+        if or1 == 0 {
+            skip;
+            if or2 == 0 {
+                wetGrass = 0;
+            } else {
+                wetGrass = 1;
+            } end if;
+        } else {
+            wetGrass = 1;
+        } end if;
+
+        """
+
+    elif name == "murdermistery":
+        x = """
+        if uniform([0,1],2) < _palice {
+            withGun = gm([0.03,0.97], [1.,0.], [0.,0.]);
+        } else {
+            withGun = gm([0.8,0.2], [1.,0.], [0.,0.]);
+        } end if;"""
+
+    elif name == "noisior":
+        x = """
+        if uniform([0,1],2) < _p0 {
+            n1 = _p1;
+            n21 = _p1;
+        } else {
+            n1 = _p2;
+            n21 = _p2;
+        } end if;
+
+        if uniform([0,1],2) < _p4 {
+            n22 = _p1;
+            n33 = _p1;
+        } else {
+            n22 = _p2;
+            n33 = _p2;
+        } end if;
+
+        if uniform([0,1],2) - n21 > 0 {
+            if uniform([0,1],2) - n22 > 0 {
+                n2 = 0;
+            } else {
+                n2 = 1;
+            } end if;
+        } else {
+            n2 = 1;
+        } end if;
+
+        if uniform([0,1],2) - n1 < 0 {
+            n31 = _p1;
+        } else {
+            n31 = _p2;
+        } end if;
+
+        if n2 == 1 {
+            n32 = _p1;
+        } else {
+            n32 = _p2;
+        } end if;
+
+        if uniform([0,1],2) - n31 < 0 {
+            if uniform([0,1],2) - n32 > 0 {
+                if uniform([0,1],2) - n33 > 0 {
+                    n3 = 0;
+                } else {
+                    n3 = 1;
+                } end if;
+            } else {
+                n3 = 1;
+            } end if;
+        } else {
+            n3 = 1;
+        } end if;
+        """
+
+    elif name == "surveyunbiased":
+        x = '''
+        if uniform([0,1],2) < _bias1 {
+            ansb1 = 1;
+        } else {
+            ansb1 = 0;
+        } end if;
+            
+        if uniform([0,1],2) < _bias2 {
+            ansb2 = 1;
+        } else {
+            ansb2 = 0;
+        } end if;
+        '''
+    elif name == 'trueskills':
+        x = '''
+        skillA = gm([1],[_pa],[10]);
+        skillB = gm([1],[_pb],[10]);
+        skillC = gm([1],[_pc],[10]);
+
+        perfA = gm([1],[0],[15])+skillA;
+        perfB = gm([1],[0],[15])+skillB;
+        perfC = gm([1],[0],[15])+skillC;
+        '''    
+        #observe(perfA-perfB > 0);
+        #observe(perfA-perfC > 0);
+        
+    elif name == 'twocoins':
+        x = '''
+        if uniform([0,1],2) < _first {
+            if uniform([0,1],2) < _second {
+                both = 1;
+            } else {
+                both = 0;
+            } end if;
+        } else {
+            both = 0;
+        } end if;'''
+    elif name == "altermu":
+        x = '''
+        w1 = gm([1.], [_p1], [5.]);
+        w2 = gm([1.], [_p2], [5.]);
+        w3 = gm([1.], [_p3], [5.]);
+
+        mean = w1*w2;
+        mean = 3*mean - w3;
+
+        y = gm([1.], [0.], [1.]) + mean;
+        '''
+
+    elif name == "altermu2":
+        x = '''
+        w1 = uniform([-10, 10], 2);
+        w2 = uniform([-10, 10], 2);
+        y = w1 + w2 + gm([1.], [_muy], [_vary]);
+        '''
+
+    elif name == "normalmixtures":
+        x = '''
+        mu1 = gm([1.], [_p1], [1]);
+        mu2 = gm([1.], [_p2], [1]);
+
+        if uniform([0,1], 2) < _theta { 
+            y = gm([1.],[0.],[1.]) + mu1; 
+        } else { 
+            y = gm([1.],[0.],[1.]) + mu2; 
+        } end if; 
+        '''
+
+    elif name == "test":
+        x = '''
+        a = gm([1.], [_p1], [1]);
+        if a < 0 {
+            b = gm([1.], [_p2], [1]);
+        } else {
+            b = gm([1.], [10.], [1]);
+        } end if;
+        '''
     else:
         raise ValueError("Program not recognized")
 

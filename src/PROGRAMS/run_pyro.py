@@ -24,15 +24,21 @@ def run_inference(model, guide, model_params, n_steps=1000, lr=0.05):
     # Perform inference
     loss_list = []
     total_start = time()
+    iterations = n_steps
     for step in range(n_steps):
+        #check for convergence within a tolerance of 1e-8 and wit a patience of 30 iterations
         loss = svi.step(model_params)
         loss_list.append(loss)
-        if step % int(n_steps/10) == 0:
-            print(f"Step {step} : loss = {loss}")
+        if step > 30 and abs(loss_list[-1] - loss_list[-2]) < 1e-8 and all(abs(loss_list[-j] - loss_list[-j-1]) < 1e-8 for j in range(2, 31)):
+            #print(f"Converged at iteration {step}")
+            iterations = step
+            break
+        #if step % int(n_steps/10) == 0:
+            #print(f"Step {step} : loss = {loss}")
     total_end = time()
-    print('Inference performed in ', round(total_end-total_start, 3))
+    #print('Inference performed in ', round(total_end-total_start, 3))
     
-    return loss_list
+    return loss_list, iterations, round(total_end-total_start, 3)
 
 def get_model_guide(program):
     if program == "bernoulli":
@@ -41,17 +47,39 @@ def get_model_guide(program):
         return model_burglary, guide_burglary
     elif program == "clickgraph":
         return model_clickgraph, guide_clickgraph
+    elif program == "clinicaltrial":
+        return model_clinicaltrial, guide_clinicaltrial
+    elif program == "coinbias":
+        return model_coinbias, guide_coinbias
+    elif program == "grass":
+        return model_grass, guide_grass
+    elif program == "murdermistery":
+        return model_murdermistery, guide_murdermistery
+    elif program == "noisior":
+        return model_noisior, guide_noisior
+    elif program == "surveyunbiased":
+        return model_surveyunbiased, guide_surveyunbiased
+    elif program == "trueskills":
+        return model_trueskills, guide_trueskills
+    elif program == "twocoins":
+        return model_twocoins, guide_twocoins
+    elif program == "altermu":
+        return model_altermu, guide_altermu
+    elif program == "altermu2":
+        return model_altermu2, guide_altermu2
+    elif program == "normalmixtures":
+        return model_normalmixtures, guide_normalmixtures
+    elif program == "test":
+        return model_test, guide_test
     else:
         raise ValueError("Program not recognized")
 
 def model_bernoulli(params):
     N, y = params
-    # Prior for theta
     p = pyro.sample("p", dist.Uniform(0,1))
 
-    # Likelihood
     with pyro.plate("data_plate", N):
-        y = pyro.sample("y", dist.Bernoulli(p), obs=y)
+        y = pyro.sample("y", dist.Bernoulli(p), obs=y[:, 0])
 
 def guide_bernoulli(params):
     p_map = pyro.param('p_map', torch.tensor(0.5))
@@ -152,3 +180,331 @@ def guide_clickgraph(params):
     # Variational posterior for global latent variable p
     p_map = pyro.param("p_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
     pyro.sample("p", dist.Delta(p_map))
+
+def model_clinicaltrial(params):
+
+    N, data = params
+    
+    # Priors on probabilities
+    pe = pyro.sample("pe", dist.Uniform(0., 1.))   # probability of effect
+    pt = pyro.sample("pt", dist.Uniform(0., 1.))   # treatment success prob
+    pc = pyro.sample("pc", dist.Uniform(0., 1.))  # baseline control prob
+    
+    with pyro.plate("data", N):
+        # Sample whether effect is active
+        effect = pyro.sample("effect", dist.Bernoulli(pe))
+        
+        # pc = pt if effect == 1 else pc_base
+        pc_real = effect * pt + (1 - effect) * pc
+
+        # Observed outcomes
+        ycontr = pyro.sample("ycontr", dist.Bernoulli(pc_real), obs=data[:, 0])
+        ytreated = pyro.sample("ytreated", dist.Bernoulli(pt), obs=data[:, 1])
+
+def guide_clinicaltrial(params):
+
+    # Variational parameters for global latent variables
+    pe_map = pyro.param("pe_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    pt_map = pyro.param("pt_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    pc_map = pyro.param("pc_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+
+    pyro.sample("pe", dist.Delta(pe_map))
+    pyro.sample("pt", dist.Delta(pt_map))
+    pyro.sample("pc", dist.Delta(pc_map))
+
+def model_coinbias(params):
+    N, data = params
+
+    # Priors for Beta parameters (shape parameters p1, p2)
+    p1 = pyro.sample("p1", dist.Exponential(1.0))
+    p2 = pyro.sample("p2", dist.Exponential(1.0))
+
+    # Latent bias sampled from a Beta distribution
+    bias = pyro.sample("bias", dist.Beta(p1, p2))
+
+    # Likelihood: observed binary outcomes
+    with pyro.plate("data_plate", N):
+        pyro.sample("y", dist.Bernoulli(bias), obs=data)
+
+
+def guide_coinbias(params):
+    # Variational parameters (unconstrained, so we apply softplus)
+    p1_map = pyro.param("p1_map", torch.tensor(1.0), constraint=dist.constraints.positive)
+    p2_map = pyro.param("p2_map", torch.tensor(1.0), constraint=dist.constraints.positive)
+    
+    # Approximate posteriors
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("p2", dist.Delta(p2_map))
+
+
+def model_grass(params):
+    """
+    Pyro model replicating the generative process of generate_grass_dataset().
+    Observes: rain, sprinkler, wetGrass, wetRoof if data is provided.
+    """
+    N, data = params
+
+    pcloudy = pyro.sample("pcloudy", dist.Exponential(1.0))
+    p1 = pyro.sample("p1", dist.Exponential(1.0))
+    p2 = pyro.sample("p2", dist.Exponential(1.0))
+    p3 = pyro.sample("p3", dist.Exponential(1.0))
+
+    with pyro.plate("data", N):
+        # Cloudiness prior
+        cloudy = pyro.sample("cloudy", dist.Bernoulli(pcloudy))
+
+        # Conditional rain/sprinkler given cloudy
+        rain_prob = torch.where(cloudy.bool(), torch.tensor(0.8), torch.tensor(0.2))
+        sprinkler_prob = torch.where(cloudy.bool(), torch.tensor(0.1), torch.tensor(0.5))
+        rain = pyro.sample("rain", dist.Bernoulli(rain_prob),
+                           obs=data[:, 0])
+        sprinkler = pyro.sample("sprinkler", dist.Bernoulli(sprinkler_prob),
+                                obs=data[:, 1])
+
+        # temp variables
+        temp1 = pyro.sample("temp1", dist.Bernoulli(p1))
+        temp2 = pyro.sample("temp2", dist.Bernoulli(p2))
+        temp3 = pyro.sample("temp3", dist.Bernoulli(p3))
+
+        # wetRoof logic
+        wetRoof = torch.where((temp1 == 1) & (rain == 1),
+                              torch.tensor(1.0),
+                              torch.tensor(0.0))
+        pyro.sample("wetRoof", dist.Bernoulli(wetRoof),
+                    obs=data[:, 3])
+
+        # OR nodes and wetGrass
+        or1 = torch.where((temp2 == 1) & (rain == 1),
+                          torch.tensor(1.0),
+                          torch.tensor(0.0))
+        or2 = torch.where((temp3 == 1) & (sprinkler == 1),
+                          torch.tensor(1.0),
+                          torch.tensor(0.0))
+        wetGrass = torch.where((or1 == 1) | (or2 == 1),
+                               torch.tensor(1.0),
+                               torch.tensor(0.0))
+        pyro.sample("wetGrass", dist.Bernoulli(wetGrass),
+                    obs=data[:, 2])
+
+def guide_grass(params):
+    N, data = params
+
+    # Variational parameters (unconstrained, so we apply softplus)
+    p1_map = pyro.param("p1_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    p2_map = pyro.param("p2_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    p3_map = pyro.param("p3_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    pcloudy_map = pyro.param("pcloudy_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+
+    # Approximate posteriors
+    pyro.sample("pcloudy", dist.Delta(pcloudy_map))
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("p2", dist.Delta(p2_map))
+    pyro.sample("p3", dist.Delta(p3_map))
+
+
+def model_murdermistery(params):
+    N, data = params
+    palice = pyro.sample("palice", dist.Exponential(1.0))
+    alice = pyro.sample("alice", dist.Bernoulli(palice))
+    # Likelihood: observed binary outcomes
+    with pyro.plate("data_plate", N):
+        gun_prob = torch.where(alice.bool(), torch.tensor(0.03), torch.tensor(0.8))
+        pyro.sample("withGun", dist.Bernoulli(gun_prob), obs=data[:,0])
+
+
+def guide_murdermistery(params):
+    # Variational parameters (unconstrained, so we apply softplus)
+    palice_map = pyro.param("palice_map", torch.tensor(1.0), constraint=dist.constraints.unit_interval)    
+    # Approximate posteriors
+    pyro.sample("palice", dist.Delta(palice_map))
+
+
+def model_noisior(params):
+    N, data = params
+    p0 = pyro.sample("p0", dist.Exponential(1.0))
+    p1 = pyro.sample("p1", dist.Exponential(1.0))
+    p2 = pyro.sample("p2", dist.Exponential(1.0))
+    p4 = pyro.sample("p4", dist.Exponential(1.0))
+
+    with pyro.plate("data", N):
+        n0 = pyro.sample("n0", dist.Bernoulli(p0))
+        n4 = pyro.sample("n4", dist.Bernoulli(p4))
+
+        n1 = torch.where(n0.bool(), p1, p2)    # scalar per batch element
+        n21 = torch.where(n0.bool(), p1, p2)
+        n22 = torch.where(n4.bool(), p1, p2)
+        n33 = torch.where(n4.bool(), p1, p2)
+
+        # P(n2=1) = 1 - (1-n21)*(1-n22)
+        n2_prob = 1.0 - (1.0 - n21) * (1.0 - n22)
+        # sample or observe n2
+        n2 = pyro.sample("n2", dist.Bernoulli(n2_prob), obs=(data[:, 0]))
+
+        # b31 is the Bernoulli(n1) that selects n31 = p1 if b31==1 else p2
+        b31 = pyro.sample("b31", dist.Bernoulli(n1))
+        n31 = torch.where(b31.bool(), p1, p2)
+
+        n32 = torch.where(n2.bool(), p1, p2)
+
+        n3_prob = 1.0 - (1.0 - n31) * (1.0 - n32) * (1.0 - n33)
+        pyro.sample("n3", dist.Bernoulli(n3_prob), obs=(data[:, 1]))
+
+def guide_noisior(params):
+    # Variational parameters (unconstrained, so we apply softplus)
+    p0_map = pyro.param("p0_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    p1_map = pyro.param("p1_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    p2_map = pyro.param("p2_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    p4_map = pyro.param("p4_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+
+    # Approximate posteriors
+    pyro.sample("p0", dist.Delta(p0_map))
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("p2", dist.Delta(p2_map))
+    pyro.sample("p4", dist.Delta(p4_map))
+
+
+def model_surveyunbiased(params):
+    N, y = params
+    # Prior for theta
+    bias1 = pyro.sample("bias1", dist.Uniform(0, 1))
+    bias2 = pyro.sample("bias2", dist.Uniform(0, 1))
+
+    # Likelihood
+    with pyro.plate("data_plate", N):
+        ansb1 = pyro.sample("ansb1", dist.Bernoulli(bias1), obs=y[:, 0])
+        ansb2 = pyro.sample("ansb2", dist.Bernoulli(bias2), obs=y[:, 1])
+
+def guide_surveyunbiased(params):
+    bias1_map = pyro.param("bias1_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    bias2_map = pyro.param("bias2_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+
+    pyro.sample("bias1", dist.Delta(bias1_map))
+    pyro.sample("bias2", dist.Delta(bias2_map))
+
+def model_trueskills(params):
+    N, data = params
+    pa = pyro.sample("pa", dist.Uniform(0, 200))
+    pb = pyro.sample("pb", dist.Uniform(0, 200))
+    pc = pyro.sample("pc", dist.Uniform(0, 200))
+
+    with pyro.plate("data", N):
+        skillA = pyro.sample("skillA", dist.Normal(pa, 10))
+        skillB = pyro.sample("skillB", dist.Normal(pb, 10))
+        skillC = pyro.sample("skillC", dist.Normal(pc, 10))
+
+        perfA = pyro.sample("perfA", dist.Normal(skillA, 15), obs=data[:, 0])
+        perfB = pyro.sample("perfB", dist.Normal(skillB, 15), obs=data[:, 1])
+        perfC = pyro.sample("perfC", dist.Normal(skillC, 15), obs=data[:, 2])
+
+
+
+def guide_trueskills(params):
+    pa_map = pyro.param("pa_map", torch.tensor(100.0))
+    pb_map = pyro.param("pb_map", torch.tensor(100.0))
+    pc_map = pyro.param("pc_map", torch.tensor(100.0))
+
+    pyro.sample("pa", dist.Delta(pa_map))
+    pyro.sample("pb", dist.Delta(pb_map))
+    pyro.sample("pc", dist.Delta(pc_map))
+
+def model_twocoins(params):
+    N, data = params
+    first = pyro.sample("first", dist.Uniform(0, 1))
+    second = pyro.sample("second", dist.Uniform(0, 1))
+
+    with pyro.plate("data", N):
+        coin1 = pyro.sample("coin1", dist.Bernoulli(first))
+        coin2 = pyro.sample("coin2", dist.Bernoulli(second))
+        both = torch.where((coin1 == 1) & (coin2 == 1),
+                           torch.tensor(1.0),
+                           torch.tensor(0.0))
+        pyro.sample("both", dist.Bernoulli(both), obs=data[:, 0])
+
+def guide_twocoins(params):
+    first_map = pyro.param("first_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    second_map = pyro.param("second_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+
+    pyro.sample("first", dist.Delta(first_map))
+    pyro.sample("second", dist.Delta(second_map))
+
+def model_altermu(params):
+    N, data = params
+    p1 = pyro.sample("p1", dist.Uniform(-10, 10))
+    p2 = pyro.sample("p2", dist.Uniform(-10, 10))
+    p3 = pyro.sample("p3", dist.Uniform(-10, 10))
+
+    with pyro.plate("data", N):
+        w1 = pyro.sample("w1", dist.Normal(p1, 5))
+        w2 = pyro.sample("w2", dist.Normal(p2, 5))
+        w3 = pyro.sample("w3", dist.Normal(p3, 5))
+
+        mean = w1 * w2
+        mean = 3 * mean - w3
+
+        y = pyro.sample("y", dist.Normal(mean, 1), obs=data[:, 0])
+
+def guide_altermu(params):
+    p1_map = pyro.param("p1_map", torch.tensor(0.0))
+    p2_map = pyro.param("p2_map", torch.tensor(0.0))
+    p3_map = pyro.param("p3_map", torch.tensor(0.0))
+
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("p2", dist.Delta(p2_map))
+    pyro.sample("p3", dist.Delta(p3_map))
+
+def model_altermu2(params):
+    N, data = params
+    muy = pyro.sample("muy", dist.Uniform(-10, 10))
+    vary = pyro.sample("vary", dist.Uniform(0.1, 20))
+
+    with pyro.plate("data", N):
+        w1 = pyro.sample("w1", dist.Uniform(-10, 10))
+        w2 = pyro.sample("w2", dist.Uniform(-10, 10))
+        y_mean = w1 + w2 + muy
+        y = pyro.sample("y", dist.Normal(y_mean, vary), obs=data[:, 0])
+
+def guide_altermu2(params):
+    muy_map = pyro.param("muy_map", torch.tensor(0.0))
+    vary_map = pyro.param("vary_map", torch.tensor(1.0), constraint=dist.constraints.positive)
+
+    pyro.sample("muy", dist.Delta(muy_map))
+    pyro.sample("vary", dist.Delta(vary_map))
+
+def model_normalmixtures(params):
+    N, data = params
+    theta = pyro.sample("theta", dist.Uniform(0, 1))
+    p1 = pyro.sample("p1", dist.Uniform(-20, 20))
+    p2 = pyro.sample("p2", dist.Uniform(-20, 20))
+
+    with pyro.plate("data", N):
+        mu1 = pyro.sample("mu1", dist.Normal(p1, 1))
+        mu2 = pyro.sample("mu2", dist.Normal(p2, 1))
+        component = pyro.sample("component", dist.Bernoulli(theta))
+        y_mean = torch.where(component.bool(), mu1, mu2)
+        y = pyro.sample("y", dist.Normal(y_mean, 1), obs=data[:, 0])
+
+def guide_normalmixtures(params):
+    theta_map = pyro.param("theta_map", torch.tensor(0.5), constraint=dist.constraints.unit_interval)
+    p1_map = pyro.param("p1_map", torch.tensor(0.0))
+    p2_map = pyro.param("p2_map", torch.tensor(0.0))
+
+    pyro.sample("theta", dist.Delta(theta_map))
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("p2", dist.Delta(p2_map))
+
+def model_test(params):
+    N, data = params
+    p1 = pyro.sample("p1", dist.Uniform(-10, 10))
+    p2 = pyro.sample("p2", dist.Uniform(-10, 10))
+
+    with pyro.plate("data", N):
+        a = pyro.sample("a", dist.Normal(p1, 1))
+        b_mean = torch.where(a < 0, p2, torch.tensor(10.0))
+        b = pyro.sample("b", dist.Normal(b_mean, 1), obs=data[:, 1])
+
+def guide_test(params):
+    p1_map = pyro.param("p1_map", torch.tensor(0.0))
+    p2_map = pyro.param("p2_map", torch.tensor(0.0))
+
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("p2", dist.Delta(p2_map))
