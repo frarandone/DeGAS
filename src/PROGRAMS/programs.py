@@ -316,13 +316,59 @@ def get_program(name):
 
     elif name == "test":
         x = '''
-        a = gm([1.], [_p1], [1]);
-        if a < 0 {
-            b = gm([1.], [_p2], [1]);
+        v = gm([1.], [_p1], [1]);
+        if v > 0 {
+            y = gm([1.], [_p2], [1]);
         } else {
-            b = gm([1.], [10.], [1]);
+            y = gm([1.], [-2.], [1]);
         } end if;
         '''
+    
+    elif name == "test2":
+        x = '''
+        v = gm([1.], [0.], [_sigma1]);
+        if v < _p1 {
+            y = 0;
+        } else {
+            y = 1.;
+        } end if;
+        '''
+
+    elif name == "pid":
+        x = '''
+        array[51] ang;
+
+        v = 0;            
+        currAng = 0.5;   
+        id = 0;        
+        oldv = 0;     
+
+        for i in range(51) {
+
+            ang[i] = currAng;                     
+
+            d = 3.14 - currAng;                    
+            torq = _s0*d + _s1*v + _s2*id;          
+            id = 0.9*id + 0.1*d;       
+            oldv = v;              
+            
+            v = v + 0.01*torq + gauss(0, 0.25);
+            currAng = currAng + 0.05*v + 0.05*oldv + gauss(0., 0.25);
+
+            /*if currAng > 6.28 {
+                currAng = currAng - 6.28;
+            } else {
+                if currAng < 0 {
+                    currAng = currAng + 6.28;
+                } else {
+                    skip;
+                } end if;
+            } end if; */
+
+        } end for;
+
+        ang[50] = currAng;         '''
+    
     else:
         raise ValueError("Program not recognized")
 

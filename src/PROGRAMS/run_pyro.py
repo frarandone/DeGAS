@@ -2,7 +2,7 @@ import torch
 import torch.distributions.constraints as constraints
 import pyro
 from pyro.optim import Adam
-from pyro.infer import SVI, Trace_ELBO, TraceEnum_ELBO
+from pyro.infer import SVI, Trace_ELBO, TraceEnum_ELBO, TraceGraph_ELBO
 from pyro.infer import MCMC, NUTS
 import pyro.distributions as dist
 from time import time
@@ -71,6 +71,10 @@ def get_model_guide(program):
         return model_normalmixtures, guide_normalmixtures
     elif program == "test":
         return model_test, guide_test
+    elif program == "test2":
+        return model_test2, guide_test2
+    elif program == "pid":
+        return model_pid, guide_pid
     else:
         raise ValueError("Program not recognized")
 
@@ -216,8 +220,8 @@ def model_coinbias(params):
     N, data = params
 
     # Priors for Beta parameters (shape parameters p1, p2)
-    p1 = pyro.sample("p1", dist.Exponential(1.0))
-    p2 = pyro.sample("p2", dist.Exponential(1.0))
+    p1 = pyro.sample("p1", dist.Uniform(0., 1.))
+    p2 = pyro.sample("p2", dist.Uniform(0., 1.))
 
     # Latent bias sampled from a Beta distribution
     bias = pyro.sample("bias", dist.Beta(p1, p2))
@@ -244,10 +248,10 @@ def model_grass(params):
     """
     N, data = params
 
-    pcloudy = pyro.sample("pcloudy", dist.Exponential(1.0))
-    p1 = pyro.sample("p1", dist.Exponential(1.0))
-    p2 = pyro.sample("p2", dist.Exponential(1.0))
-    p3 = pyro.sample("p3", dist.Exponential(1.0))
+    pcloudy = pyro.sample("pcloudy", dist.Uniform(0., 1.))
+    p1 = pyro.sample("p1", dist.Uniform(0., 1.))
+    p2 = pyro.sample("p2", dist.Uniform(0., 1.))
+    p3 = pyro.sample("p3", dist.Uniform(0., 1.))
 
     with pyro.plate("data", N):
         # Cloudiness prior
@@ -304,7 +308,7 @@ def guide_grass(params):
 
 def model_murdermistery(params):
     N, data = params
-    palice = pyro.sample("palice", dist.Exponential(1.0))
+    palice = pyro.sample("palice", dist.Uniform(0., 1.))
     alice = pyro.sample("alice", dist.Bernoulli(palice))
     # Likelihood: observed binary outcomes
     with pyro.plate("data_plate", N):
@@ -314,17 +318,17 @@ def model_murdermistery(params):
 
 def guide_murdermistery(params):
     # Variational parameters (unconstrained, so we apply softplus)
-    palice_map = pyro.param("palice_map", torch.tensor(1.0), constraint=dist.constraints.unit_interval)    
+    palice_map = pyro.param("palice_map", torch.tensor(0.9), constraint=dist.constraints.unit_interval)    
     # Approximate posteriors
     pyro.sample("palice", dist.Delta(palice_map))
 
 
 def model_noisior(params):
     N, data = params
-    p0 = pyro.sample("p0", dist.Exponential(1.0))
-    p1 = pyro.sample("p1", dist.Exponential(1.0))
-    p2 = pyro.sample("p2", dist.Exponential(1.0))
-    p4 = pyro.sample("p4", dist.Exponential(1.0))
+    p0 = pyro.sample("p0", dist.Uniform(0.0, 1.0))
+    p1 = pyro.sample("p1", dist.Uniform(0.0, 1.0))
+    p2 = pyro.sample("p2", dist.Uniform(0.0, 1.0))
+    p4 = pyro.sample("p4", dist.Uniform(0.0, 1.0))
 
     with pyro.plate("data", N):
         n0 = pyro.sample("n0", dist.Bernoulli(p0))
@@ -496,15 +500,83 @@ def model_test(params):
     N, data = params
     p1 = pyro.sample("p1", dist.Uniform(-10, 10))
     p2 = pyro.sample("p2", dist.Uniform(-10, 10))
+    p3 = pyro.sample("p3", dist.Uniform(-10, 10))
 
     with pyro.plate("data", N):
-        a = pyro.sample("a", dist.Normal(p1, 1))
-        b_mean = torch.where(a < 0, p2, torch.tensor(10.0))
-        b = pyro.sample("b", dist.Normal(b_mean, 1), obs=data[:, 1])
+        v = pyro.sample("v", dist.Normal(p1, 1))
+        y_mean = torch.where(v > 0, p2, -2.)
+        y = pyro.sample("y", dist.Normal(y_mean, 1), obs=data[:, 0])
 
 def guide_test(params):
-    p1_map = pyro.param("p1_map", torch.tensor(0.0))
-    p2_map = pyro.param("p2_map", torch.tensor(0.0))
+    p1_map = pyro.param("p1_map", torch.tensor(0.))
+    p2_map = pyro.param("p2_map", torch.tensor(0.))
+    #p3_map = pyro.param("p3_map", torch.tensor(0.))
 
     pyro.sample("p1", dist.Delta(p1_map))
     pyro.sample("p2", dist.Delta(p2_map))
+    #pyro.sample("p3", dist.Delta(p3_map))
+
+
+def model_test2(params):
+    N, data = params
+    p1 = pyro.sample("p1", dist.Uniform(-10, 10))
+    sigma1 = pyro.sample("sigma1", dist.Uniform(0, 10))
+
+    with pyro.plate("data", N):
+        v = pyro.sample("v", dist.Normal(0., sigma1))
+        y_mean = torch.where(v < p1, 0., 1.)
+        y = pyro.sample("y", dist.Bernoulli(y_mean), obs=data[:, 0])
+
+def guide_test2(params):
+    p1_map = pyro.param("p1_map", torch.tensor(0.))
+    sigma1_map = pyro.param("sigma1_map", torch.tensor(1.), constraint=dist.constraints.positive)
+    #p3_map = pyro.param("p3_map", torch.tensor(0.))
+
+    pyro.sample("p1", dist.Delta(p1_map))
+    pyro.sample("sigma1", dist.Delta(sigma1_map))
+
+def model_pid(params):
+    N, data = params
+    # Sample parameters
+    s0 = pyro.sample("s0", dist.Normal( torch.tensor(43.0), 1.0))
+    s1 = pyro.sample("s1", dist.Normal(torch.tensor(-26.0), 1.0))
+    s2 = pyro.sample("s2", dist.Normal(torch.tensor(0.0), 1.0))
+
+    target = 3.14
+    dt = 0.15
+    inertia = 10
+    decay = 0.9
+    T = 50
+    init_ang = 0.5
+
+    traj_list = []
+    v = torch.zeros(N)
+    ang = torch.ones(N) * init_ang
+    id = torch.zeros(N)
+
+    noise = dist.Normal(0., 0.25)
+    noise_ang = dist.Normal(0., 0.25)
+
+    for i in range(T):
+        traj_list.append(ang)
+        d = target - ang
+        torq = s0 * d + s1 * v + s2 * id
+        id = decay * id + d * dt
+        oldv = v
+        v = v + (dt / inertia) * torq + noise.rsample([N])
+        ang = ang + (dt / 2) * (v + oldv) + noise_ang.rsample([N])
+
+    traj = torch.stack(traj_list, dim=1)
+
+    with pyro.plate("data", N):
+        pyro.sample("obs", dist.Normal(traj, 0.5).to_event(1), obs=data)
+
+def guide_pid(params):
+    s0_loc = pyro.param("s0_map", torch.tensor(43.0))
+    s1_loc = pyro.param("s1_map", torch.tensor(-26.0))
+    s2_loc = pyro.param("s2_map", torch.tensor(0.0))
+
+    pyro.sample("s0", dist.Normal(s0_loc, torch.tensor(1.0)))
+    pyro.sample("s1", dist.Normal(s1_loc, torch.tensor(1.0)))
+    pyro.sample("s2", dist.Normal(s2_loc, torch.tensor(1.0)))
+
