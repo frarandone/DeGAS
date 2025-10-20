@@ -6,7 +6,10 @@ def get_vars(process_name):
         data_var_list = ['y']
         return data_var_list
     if process_name == 'test':
-        data_var_list = ['a', 'b']
+        data_var_list = ['y']
+        return data_var_list
+    if process_name == 'test2':
+        data_var_list = ['y']
         return data_var_list
     if process_name == 'clickgraph':
         data_var_list = ['click0', 'click1']
@@ -37,6 +40,10 @@ def get_vars(process_name):
         return data_var_list
     if process_name =="noisior":
         data_var_list = ['n2', 'n3']
+        return data_var_list
+    if process_name == "pid":
+        # variables are ang[1], ang[2], ..., ang[50]
+        data_var_list = ['ang[{}]'.format(i) for i in range(1, 51)]
         return data_var_list
     if process_name == 'mog1':
         data_var_list = ['mu', 'sigma', 'x']
@@ -169,7 +176,15 @@ def get_params(process_name):
         return true_params, init_params
     if process_name == 'test':
         true_params = {'p1': 0.5, 'p2': 1.0}
-        init_params = {'p1': 0.0, 'p2': 5.0}
+        init_params = {'p1': 0., 'p2': 0.}
+        return true_params, init_params
+    if process_name == 'test2':
+        true_params = {'p1': 1.0, 'sigma1': 2.0,}
+        init_params = {'p1': 0., 'sigma1': 1.0}
+        return true_params, init_params
+    if process_name == 'pid':
+        true_params = {'s0': 46., 's1': -23., 's2': 0.001}
+        init_params = {'s0': 46., 's1': -23., 's2': 0.001}
         return true_params, init_params
 
 def generate_dataset(process_name, data_size, params):
@@ -227,6 +242,10 @@ def generate_dataset(process_name, data_size, params):
         return generate_multiplebranches_dataset(data_size)
     if process_name == 'test':
         return generate_test_dataset(data_size, params)
+    if process_name == 'test2':
+        return generate_test2_dataset(data_size, params)
+    if process_name == 'pid':
+        return generate_pid_dataset(data_size, params)
     else:
         raise ValueError(f"Unknown process name: {process_name}")
     
@@ -686,10 +705,60 @@ def generate_test_dataset(data_size, params):
     data = []
     p1, p2 = params['p1'], params['p2']
     for _ in range(data_size):
-        a = np.random.normal(p1, 1)
-        if a < 0:
-            b = np.random.normal(p2, 1)
+        v = np.random.normal(p1, 5)
+        if v > 0:
+            y = np.random.normal(p2, 1)
         else:
-            b = np.random.normal(10., 1)
-        data.append([a, b])
+            y = np.random.normal(-2, 1)
+        data.append([y])
+    return data
+
+def generate_test2_dataset(data_size, params):
+    data = []
+    p1, sigma1 = params['p1'], params['sigma1']
+    for _ in range(data_size):
+        v = np.random.normal(0., sigma1)
+        if v < p1:
+            y = 0.
+        else:
+            y = 1.
+        data.append([y])
+    return data
+
+def generate_pid_dataset(data_size, params):
+    data = []
+    s0, s1, s2 = params['s0'], params['s1'], params['s2']
+    for _ in range(data_size):
+        target = 3.14
+        T = 50
+        '''
+        dt = 0.1
+        inertia = 10
+        decay = 0.9
+        
+        init_ang = 0.5
+        
+        traj = []
+        noise = np.random.normal(0, 0.25)
+        noise_ang = np.random.normal(0, 0.25)
+
+        v = 0 
+        ang = init_ang 
+        id = 0 
+
+        for i in range(0,T):
+
+            traj.append(ang)
+
+            d = target - ang
+            torq = s0*d + s1*v + s2*id
+            id = decay*id + d*dt
+            oldv = v 
+            v = v + (dt/inertia)*torq + noise.rsample()
+            ang = ang + (dt/2)*(v+oldv) + noise_ang.rsample()
+
+        traj[T-1] = ang 
+        '''
+        ang = [target for _ in range(T)]
+        data.append(ang)
     return data

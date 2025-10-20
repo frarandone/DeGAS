@@ -1,6 +1,7 @@
 import sys, os
 sys.path.append(os.path.abspath(os.path.join('..')))
 print(sys.path)
+import gc
 
 from sogaPreprocessor import *
 from producecfg import *
@@ -26,6 +27,12 @@ from pyro.infer import MCMC, NUTS
 import pyro.distributions as dist
 import pandas as pd
 import arviz as az
+
+torch.multiprocessing.set_sharing_strategy("file_system")
+import multiprocessing as mp
+torch.set_num_threads(1)
+
+
 
 
 def neg_log_likelihood(data, dist, idx):
@@ -87,6 +94,7 @@ if __name__ == "__main__":
     true_params, init_params = get_params(program)
     data = generate_dataset(program, data_size, true_params)  
     print("DeGAS optimization")
+    '''
     # run one optimization for lr in [0.01, 0.05, 0.1] and choose the best one
     best_lr = 0.01
     best_error = float('inf')
@@ -121,6 +129,7 @@ if __name__ == "__main__":
     for params in parameters:
         #calculate mean relative error
         error = np.mean([abs(params[key].item() - true_value)/abs(true_value) for key, true_value in true_params.items()])
+        print(f"Error in run: {error}")
         errors.append(error)
     errors = np.array(errors)
 
@@ -160,22 +169,30 @@ if __name__ == "__main__":
     #print the error values
     for eps, error in zip(eps_values, error_list):
         print(f"Epsilon: {eps}, Error: {error}")
-
+    '''
+    
     ### PYRO INFERENCE
 
     print("Pyro inference")
     pyro.clear_param_store()
     model, guide = get_model_guide(program)
+    
     #choose the best learning rate between [0.01, 0.05, 0.1]
     best_lr = 0.01
     best_error = float('inf')
-    for lr in [0.01, 0.05, 0.1]:
-        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=1000, lr=lr)
+    for lr in [0.001, 0.0005, 0.01, 0.05, 0.1, 0.2]:
+        try:
+            loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=50000, lr=lr)
+            error = np.mean([abs(pyro.param(key + "_map").item() - true_value)/abs(true_value) for key, true_value in true_params.items()])
+            if error < best_error:
+                best_error = error
+                best_lr = lr
+        except Exception as e:
+            print(f"Error occurred for lr={lr}: {e}")
+            continue
+        #loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=10000, lr=lr)
         #calculate mean relative error
-        error = np.mean([abs(pyro.param(key + "_map").item() - true_value)/abs(true_value) for key, true_value in true_params.items()])
-        if error < best_error:
-            best_error = error
-            best_lr = lr
+        
     #with best lr run inference 10 times and save all the results
     print(f"Best lr for VI: {best_lr}")
     params_list = []
@@ -183,7 +200,7 @@ if __name__ == "__main__":
     time_list_VI = []
     iters_list_VI = []
     for i in range(10):
-        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=1000, lr=best_lr)
+        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=50000, lr=best_lr)
         params_list.append({key: pyro.param(key + "_map").item() for key in true_params.keys()})
         loss_list_VI.append(loss_list)
         time_list_VI.append(time_VI)
@@ -193,11 +210,18 @@ if __name__ == "__main__":
         #calculate mean relative error
         error = np.mean([abs(params[key] - true_value)/abs(true_value) for key, true_value in true_params.items()])
         errors.append(error)
+        print(f"Error in run VI {i}: {error}")
     errors = np.array(errors)
     mean_error = np.mean(errors)
     print(f"Mean iterations VI: {np.mean(iters_list_VI)}")
     print(f"Mean relative error VI: {mean_error}")
+    print(f"Mean time VI: {np.mean(time_list_VI)}")
     np.savetxt(f"errors_csv/errors_VI_{program}.csv", np.array([mean_error]), delimiter=",", header="R2_VI", comments='')
+    #save loss
+    #loss_list_VI = np.array(loss_list_VI)
+    mean_loss_VI = np.mean(loss_list_VI, axis=0)
+    std_loss_VI = np.std(loss_list_VI, axis=0)
+    np.savetxt(f"losses_csv/losses_VI_{program}.csv", np.vstack((mean_loss_VI, std_loss_VI)).T, delimiter=",", header="mean,std", comments='')
 
     #for key, true_value in true_params.items():
             #estimated_value = pyro.param(key + "_map").item()
@@ -206,51 +230,67 @@ if __name__ == "__main__":
 
     #avg_error = np.mean([abs(pyro.param(key + "_map").item() - true_value)/abs(true_value) for key, true_value in true_params.items()])
     #print(f"Average error: {avg_error}")
-    print(f"Mean time VI: {np.mean(time_list_VI)}")
+    
     np.savetxt(f"time_csv/time_VI_{program}.csv", np.array([np.mean(time_list_VI)]), delimiter=",", header="time_VI", comments='')
     np.savetxt(f"iters_csv/iters_VI_{program}.csv", np.array([np.mean(iterations)]), delimiter=",", header="iterations_VI", comments='')
     #save the params value in a csv file
     params_df = pd.DataFrame(params_list)
     params_df.to_csv(f"opt_params/params_VI_{program}.csv", index=False)
-
-
+    
+    '''
     print("MCMC inference")
     rhat = 2.0
     num_samples = 0
     warmup_steps = 50
 
-    while rhat > 1.05 and num_samples < 10000:
+    while rhat > 1.05 and num_samples < 60000:
+
             num_samples += 500
             if num_samples > 2000:
                     warmup_steps += 50
             elif num_samples > 5000:
                     warmup_steps += 100
-
+            print(f"Running MCMC with num_samples={num_samples}, warmup_steps={warmup_steps}")
             # Run the inference with num_samples=500, warmup_steps=50 and check convergence with R-hat and Neff
             pyro.clear_param_store()
             # Do the same with MCMC
             nuts_kernel = NUTS(model, adapt_step_size=True)
-            mcmc = MCMC(nuts_kernel, num_samples=num_samples, warmup_steps=warmup_steps, num_chains=4)
+            mcmc = MCMC(nuts_kernel, num_samples=num_samples, warmup_steps=warmup_steps, num_chains=2)
             start = time.time()
             mcmc.run((data_size, torch.tensor(data, dtype=torch.float64)))
             end = time.time()
             # Get total time
             total_time = end - start
             print(f"Total MCMC runtime: {total_time:.3f} seconds")
+            if total_time > 600:
+                print("MCMC runtime exceeded 6000 seconds, stopping further runs.")
+                break
             #mcmc.summary()
             samples = mcmc.get_samples(group_by_chain=True)
+            print("Samples obtained")
+            gc.collect()
+            mp.active_children()  # triggers cleanup
+            for p in mp.active_children():
+                p.terminate()
+            print("Active children terminated")
             idata = az.convert_to_inference_data(samples)
-            print(az.summary(idata, round_to=4))
-            rhat_all = az.rhat(idata)
-            valid_rhat = rhat_all.where(~np.isnan(rhat_all), drop=True)
-            rhat = valid_rhat.to_array().max().item()
-            neff = az.ess(idata).to_array().min().item()
+            print("Converted to inference data")
+            #print(az.summary(idata, round_to=4))
+            try:
+                rhat_all = az.rhat(idata)
+                valid_rhat = rhat_all.where(~np.isnan(rhat_all), drop=True)
+                rhat = valid_rhat.to_array().max().item()
+                neff = az.ess(idata).to_array().min().item()
+            except Exception as e:
+                print(f"Error computing R-hat and Neff: {e}")
+                rhat = float('inf')
+                neff = 0
+                continue
 
-
-    print(f"R-hat maximum: {rhat}")
-    print(f"Neff minimum: {neff}")
-    print(f"Num samples: {num_samples}")
-    print(f"Warmup steps: {warmup_steps}")
+            print(f"R-hat maximum: {rhat}")
+            print(f"Neff minimum: {neff}")
+            print(f"Num samples: {num_samples}")
+            print(f"Warmup steps: {warmup_steps}")
 
 
     for key, true_value in true_params.items():
@@ -261,4 +301,4 @@ if __name__ == "__main__":
     avg_error = np.mean([abs(torch.mean(samples[key]) - true_value)/abs(true_value) for key, true_value in true_params.items()])
     print(f"Average error: {avg_error}")
 
-   
+'''
