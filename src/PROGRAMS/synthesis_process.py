@@ -94,7 +94,7 @@ if __name__ == "__main__":
     true_params, init_params = get_params(program)
     data = generate_dataset(program, data_size, true_params)  
     print("DeGAS optimization")
-    '''
+    
     # run one optimization for lr in [0.01, 0.05, 0.1] and choose the best one
     best_lr = 0.01
     best_error = float('inf')
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     #print the error values
     for eps, error in zip(eps_values, error_list):
         print(f"Epsilon: {eps}, Error: {error}")
-    '''
+    
     
     ### PYRO INFERENCE
 
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     best_error = float('inf')
     for lr in [0.001, 0.0005, 0.01, 0.05, 0.1, 0.2]:
         try:
-            loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=50000, lr=lr)
+            loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=1000, lr=lr)
             error = np.mean([abs(pyro.param(key + "_map").item() - true_value)/abs(true_value) for key, true_value in true_params.items()])
             if error < best_error:
                 best_error = error
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     time_list_VI = []
     iters_list_VI = []
     for i in range(10):
-        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=50000, lr=best_lr)
+        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=1000, lr=best_lr)
         params_list.append({key: pyro.param(key + "_map").item() for key in true_params.keys()})
         loss_list_VI.append(loss_list)
         time_list_VI.append(time_VI)
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     params_df = pd.DataFrame(params_list)
     params_df.to_csv(f"opt_params/params_VI_{program}.csv", index=False)
     
-    '''
+    
     print("MCMC inference")
     rhat = 2.0
     num_samples = 0
@@ -300,5 +300,3 @@ if __name__ == "__main__":
 
     avg_error = np.mean([abs(torch.mean(samples[key]) - true_value)/abs(true_value) for key, true_value in true_params.items()])
     print(f"Average error: {avg_error}")
-
-'''

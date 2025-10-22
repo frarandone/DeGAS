@@ -98,9 +98,12 @@ def pid(T=50, init_ang = 0.5, s0=1, s1=1, s2=1):
 
     traj[T-1] = ang 
 
-    return traj
+    #Actually we want to use ideal trajectories
+    observed_traj = target*torch.ones(T)
 
-def bouncing_ball(T=30, init_y=9., eps=0.1, R = 5.0, C = 0.0025, m = 7.0):
+    return observed_traj
+
+def bouncing_ball(T=30, init_H=9., eps=0.1, R = 5.0, C = 400, m = 7.0):
 
     g = 9.81
     #R = 5.0
@@ -110,7 +113,7 @@ def bouncing_ball(T=30, init_y=9., eps=0.1, R = 5.0, C = 0.0025, m = 7.0):
     mode = -1.
 
     traj = torch.zeros(T)
-    traj[0] = distributions.Normal(init_y, 1).rsample()
+    traj[0] = distributions.Normal(init_H, 1).rsample()
     v = 0.
 
     noise = distributions.Normal(torch.tensor(0.), torch.tensor(eps))
@@ -120,7 +123,7 @@ def bouncing_ball(T=30, init_y=9., eps=0.1, R = 5.0, C = 0.0025, m = 7.0):
         if mode == -1.:
             v = v - g*dt + noise.rsample()
         else:
-            v = v - (g + ((R*v+traj[i-1]/C)/m))*dt + noise.rsample()
+            v = v - (g + ((R*v+traj[i-1]*C)/m))*dt + noise.rsample()
         
         traj[i] = traj[i-1] + v*dt + noise.rsample()
 
@@ -153,3 +156,58 @@ def plot_traj_set(traj_set, single_traj=0, color='blue', ls='-', label=None):
         plt.plot(range(T), traj_set[i], color='grey')
     plt.plot(range(T), torch.mean(traj_set, 0), lw=3, ls=ls, color=color, label=label)
     plt.legend()
+
+
+def get_orig_params(name):
+    if name == 'thermostat':
+        orig_params = {'T': 30,   # time steps
+        'init_T': 16.,  # initial temperature
+        'tOn': 17,      # turn-on temperature
+        'tOff': 20}
+        n_traj = 100
+        params = {'tOn':  15., 'tOff':22.}
+        var_name = 'T'
+        model = thermostat_model
+        n_steps = 40
+        lr = 0.1
+    elif name == 'gearbox':
+        orig_params = {'T': 20,   # time steps
+               'init_v': 5.,  # initial velocity
+               'gear': 1,      # initial gear
+               's1': 10.,
+               's2': 20.}
+        n_traj = 1000
+        params = {'s1':8., 's2':12.}
+        var_name = 'v'
+        model = gearbox
+        n_steps = 200
+        lr = 0.3
+
+    elif name == 'bouncing_ball':
+        orig_params = {'T': 35,   # time steps
+               'init_H': 9.,  # initial height
+               'R': 7.0,
+               'C': 400.,
+               'm': 7.0}
+        n_traj = 100
+        params = {'R':  -1., 'C':450.}
+        var_name = 'H'
+        model = bouncing_ball
+        n_steps = 50
+        lr = 0.8
+
+    elif   name == 'pid':
+        orig_params = {'T': 50,
+               'init_ang': 0.5,
+               's0': 46.,
+               's1': -23.,
+               's2': 0.}
+        n_traj = 500
+        params = {'s0':46., 's1':-23., 's2':0.}
+        var_name = 'ang'
+        model = pid
+        n_steps = 1000
+        lr = 0.2
+    else:
+        raise ValueError(f"Unknown program name: {name}")
+    return orig_params, n_traj, params, var_name, model, n_steps, lr
