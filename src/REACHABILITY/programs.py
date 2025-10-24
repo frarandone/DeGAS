@@ -190,6 +190,7 @@ def get_program(name):
         '''
         params = {'tOff':  16.5, 'tOn':22.}
         t = 25
+        traj_var = 'T'
     else:
         raise ValueError(f"Unknown program name: {name}")
 

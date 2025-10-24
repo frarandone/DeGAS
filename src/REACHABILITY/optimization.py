@@ -8,7 +8,7 @@ from smoothcfg import *
 from libSOGA import *
 
 # The function optimize performs the optimization of the parameters using the Adam optimizer.
-def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
+def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=True ):
 
     # creates the optimizer, passing the parameters of the program as the parameters to optimize
     optimizer = torch.optim.Adam([params_dict[key] for key in params_dict.keys()], lr=lr)
@@ -33,7 +33,7 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05):
         
 
         # Print progress
-        if True:#i % int(n_steps/10) == 0:
+        if print_progress:#i % int(n_steps/10) == 0:
             out = ''
             for key in params_dict.keys():
                 out = out + key + ': ' + str(params_dict[key].item()) + ' '

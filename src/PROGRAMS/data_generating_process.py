@@ -121,71 +121,139 @@ def get_params(process_name):
     if process_name == 'bernoulli':
         true_params = {'p': 0.8}
         init_params = {'p': 0.5}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.05
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'burglary':
         true_params = {'pe': 0.01, 'pb': 0.1}
         init_params = {'pe': 0.5, 'pb': 0.5}
-        return true_params, init_params
+        lr = 0.005
+        lr_VI = 0.05
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'clickgraph':
         true_params = {'p': 0.8}
         init_params = {'p': 0.5}
-        return true_params, init_params
+        lr = 0.2
+        lr_VI = 0.001
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'clinicaltrial':
         true_params = {'pe': 0.1, 'pc': 0.3, 'pt': 0.8}
         init_params = {'pe': 0.5, 'pc': 0.5, 'pt': 0.5}
-        return true_params, init_params
+        lr = 0.001
+        lr_VI = 0.2
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'coinbias':
         true_params = {'p1': 2.0, 'p2': 5.0}
         init_params = {'p1': 1.0, 'p2': 1.0}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.05
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'grass':
         true_params = {'pcloudy': 0.5, 'p1': 0.7, 'p2': 0.9, 'p3': 0.9}
         init_params = {'pcloudy': 0.5, 'p1': 0.5, 'p2': 0.5, 'p3': 0.5}
-        return true_params, init_params
+        lr = 0.1
+        lr_VI = 0.01
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'murdermistery':
         true_params = {'palice': 0.1}
         init_params = {'palice': 0.5}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.001
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'noisior':
         true_params = {'p0': 0.5, 'p1': 0.8, 'p2': 0.1, 'p4': 0.5}
         init_params = {'p0': 0.3, 'p1': 0.3, 'p2': 0.3, 'p4': 0.3}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.001
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'surveyunbiased':
         true_params = {'bias1': 0.8, 'bias2': 0.7}
         init_params = {'bias1': 0.5, 'bias2': 0.5}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.01
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == "trueskills":
         true_params = {'pa': 105., 'pb': 90., 'pc': 120.}
         init_params = {'pa': 100., 'pb': 100., 'pc': 100.}
-        return true_params, init_params
+        lr = 0.2
+        lr_VI = 0.2
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'twocoins':
         true_params = {'first': 0.8, 'second': 0.2}
         init_params = {'first': 0.5, 'second': 0.5}
-        return true_params, init_params
+        lr = 0.001
+        lr_VI = 0.05
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'altermu':
         true_params = {'p1': 1.0, 'p2': 2.0, 'p3': 3.0}
         init_params = {'p1': 0.5, 'p2': 0.5, 'p3': 0.5}
-        return true_params, init_params
+        lr = 0.05
+        lr_VI = 0.0005
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'altermu2':
         true_params = {'muy': 3.0, 'vary': 3.0}
         init_params = {'muy': 0.0, 'vary': 1.0}
-        return true_params, init_params
+        lr = 0.2
+        lr_VI = 0.001
+        mcmc_steps = 1500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'normalmixtures':
         true_params = {'theta': 0.7, 'p1': -10.0, 'p2': 1.0}
         init_params = {'theta': 0.5, 'p1': 0.0, 'p2': 0.0}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.0005
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'test':
         true_params = {'p1': 0.5, 'p2': 1.0}
         init_params = {'p1': 0., 'p2': 0.}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.001
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'test2':
         true_params = {'p1': 1.0, 'sigma1': 2.0,}
         init_params = {'p1': 0., 'sigma1': 1.0}
-        return true_params, init_params
+        lr = 0.01
+        lr_VI = 0.001
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
     if process_name == 'pid':
         true_params = {'s0': 46., 's1': -23., 's2': 0.001}
         init_params = {'s0': 46., 's1': -23., 's2': 0.001}
-        return true_params, init_params
+        lr = 0.2
+        lr_VI = 0.05
+        mcmc_steps = 500
+        mcmc_warmup = 50
+        return true_params, init_params, lr, lr_VI, mcmc_steps, mcmc_warmup
 
 def generate_dataset(process_name, data_size, params):
     if process_name == 'bernoulli':
