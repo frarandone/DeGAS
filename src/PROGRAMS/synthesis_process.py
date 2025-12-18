@@ -35,7 +35,7 @@ torch.set_num_threads(1)
 
 
 
-def neg_log_likelihood(data, dist, idx):
+def neg_log_likelihood_programs(data, dist, idx):
     log_likelihood = torch.log(dist.gm.marg_pdf(data, idx))
     return - torch.sum(log_likelihood)
 
@@ -47,10 +47,14 @@ def run_optimization(name, data, params_init, true_params, eps, sensitivity_anal
 
     params_dict = initialize_params(params_init)  
     output_dist = start_SOGA(cfg, params_dict)
+    print("number of components: ", output_dist.gm.pi.shape[0])
+    with open("current_dist_stats.txt", "a") as f:
+        #write program name withpout overwriting
+        f.write(f"Program: {name}\n")
     data_var_list = get_vars(name)
     data_var_index = [output_dist.var_list.index(var) for var in data_var_list]
     data = torch.tensor(data, dtype=torch.float64)
-    loss = lambda dist : neg_log_likelihood(data, dist, data_var_index)
+    loss = lambda dist : neg_log_likelihood_programs(data, dist, data_var_index)
 
     # repeat t
     loss_list, time, number_of_iterations = optimize(cfg, params_dict, loss, n_steps=steps, lr=lr, print_progress=False)
@@ -110,7 +114,7 @@ def process(name, all = False):
     parameters = []
     time_list = []
     iters_list = []
-    for i in range(10):
+    for i in range(1):
         loss_list, params, error, time_degas, number_of_iterations = run_optimization(program, data, init_params, true_params, eps=0.001, lr=best_lr, steps=500)
         losses.append(loss_list)
         parameters.append(params)
@@ -167,7 +171,7 @@ def process(name, all = False):
         for eps, error in zip(eps_values, error_list):
             print(f"Epsilon: {eps}, Error: {error}")
         
-    
+    '''
     ### PYRO INFERENCE
 
     print("Pyro inference")
@@ -339,7 +343,7 @@ def process(name, all = False):
     print(f"Average error: {avg_error}")
 
     return np.mean(time_list_VI), mean_error_VI, total_time, avg_error, rhat, neff, mean_time_degas, mean_error_degas
-
+'''
 
 if __name__ == "__main__":
     #take argument name from command line
@@ -350,14 +354,15 @@ if __name__ == "__main__":
 
     print(f"Running optimization for program: {name}")
     if name == "all":
-        programs = ['bernoulli', 'burglary', 'clickgraph', 'clinicaltrial',
-                    'grass', 'murdermistery', 'surveyunbiased', 'trueskills',
+        #['bernoulli', 'burglary', 'clickgraph', 'clinicaltrial', 'grass', 
+        programs = ['murdermistery', 'surveyunbiased', 'trueskills',
                     'twocoins', 'altermu', 'altermu2', 'normalmixtures', 'pid']
         for program in programs:
             print(f"Processing program: {program}")
-            time_VI, error_VI, time_mcmc, error_mcmc, rhat, neff, time_degas, error_degas = process(program, all=True)
+            process(program, all = True)
+            #time_VI, error_VI, time_mcmc, error_mcmc, rhat, neff, time_degas, error_degas = process(program, all=True)
             # open a file results_all.csv (if exists, otherwise create) and append the results
-            with open("results_all.csv", "a") as f:
-                f.write(f"{program},{time_VI},{error_VI},{time_mcmc},{error_mcmc},{rhat},{neff},{time_degas},{error_degas}\n")
+            #with open("results_all.csv", "a") as f:
+                #f.write(f"{program},{time_VI},{error_VI},{time_mcmc},{error_mcmc},{rhat},{neff},{time_degas},{error_degas}\n")
     else:
         process(name)

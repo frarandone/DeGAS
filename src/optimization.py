@@ -49,6 +49,10 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=T
     total_end = time()
     if print_progress:
         print('Optimization performed in ', round(total_end-total_start, 3))
+    #put current dist mean and cov in a file
+    with open("current_dist_stats.txt", "a") as f:
+        f.write(f"Current dist mean: {current_dist.gm.mean().detach().numpy()}\n")
+        f.write(f"Current dist cov: {current_dist.gm.cov().detach().numpy()}\n")
     return loss_list, round(total_end-total_start, 3), number_of_iterations
 
 
