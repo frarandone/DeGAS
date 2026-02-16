@@ -1,13 +1,14 @@
 # To be updated
-antlr4-python3-runtime==4.10   # make sure you use this version or you will get a lot of warnings
+antlr4-python3-runtime==4.10
 numpy>=1.21.6
 scipy>=1.7.3
-sympy==1.9
+#sympy==1.9
 scikit-learn==1.3.2
-Mathics-omnibus==4.0.1
-pandas==2.0.3
-pymc3==3.11.5
+pandas>=1.5.3
 psutil==5.9.8
-Jinja2==3.1.4
-natsort==8.4.0
 botorch
+torch>=1.13.1
+pyro-ppl>=1.8.0
+matplotlib>=3.5.1
+#seaborn>=0.12.2
+arviz==0.23.0
