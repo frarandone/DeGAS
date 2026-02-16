@@ -86,13 +86,14 @@ def run_optimization(name, data, params_init, true_params, eps, sensitivity_anal
 #main function, taking as input the name of the program
 
 def process(name, all = False):
-
+    #set seed for reproducibility
+    np.random.seed(17)
     program = name
     data_size = 1000
     true_params, init_params, lr_param, lr_VI_param, mcmc_steps_param, mcmc_warmup_param = get_params(program)
     data = generate_dataset(program, data_size, true_params)  
     print("DeGAS optimization")
-    
+    '''
     if all:
          best_lr = lr_param
     else:
@@ -170,14 +171,14 @@ def process(name, all = False):
         #print the error values
         for eps, error in zip(eps_values, error_list):
             print(f"Epsilon: {eps}, Error: {error}")
-        
-    '''
+        '''
+    
     ### PYRO INFERENCE
 
     print("Pyro inference")
     pyro.clear_param_store()
     model, guide = get_model_guide(program)
-    if all:
+    if True: #all:
         best_lr = lr_VI_param
     else:
     #choose the best learning rate between [0.01, 0.05, 0.1]
@@ -203,7 +204,7 @@ def process(name, all = False):
     time_list_VI = []
     iters_list_VI = []
     for i in range(10):
-        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=1000, lr=best_lr)
+        loss_list, iterations, time_VI = run_inference(model, guide, model_params=(data_size,torch.tensor(data, dtype=torch.float64)), n_steps=50000, lr=best_lr)
         params_list.append({key: pyro.param(key + "_map").item() for key in true_params.keys()})
         loss_list_VI.append(loss_list)
         time_list_VI.append(time_VI)
@@ -261,7 +262,7 @@ def process(name, all = False):
         print(f"Total MCMC runtime: {total_time:.3f} seconds")
         if total_time > 600:
             print("MCMC runtime exceeded 6000 seconds, stopping further runs.")
-            return mean_error_VI, np.mean(time_list_VI), np.NaN, np.NaN, np.NaN, np.NaN, mean_time_degas, mean_error_degas
+            return mean_error_VI, np.mean(time_list_VI), np.nan, np.nan, np.nan, np.nan, mean_time_degas, mean_error_degas
         #mcmc.summary()
         samples = mcmc.get_samples(group_by_chain=True)
         #print("Samples obtained")
@@ -343,7 +344,7 @@ def process(name, all = False):
     print(f"Average error: {avg_error}")
 
     return np.mean(time_list_VI), mean_error_VI, total_time, avg_error, rhat, neff, mean_time_degas, mean_error_degas
-'''
+
 
 if __name__ == "__main__":
     #take argument name from command line
@@ -359,10 +360,10 @@ if __name__ == "__main__":
                     'twocoins', 'altermu', 'altermu2', 'normalmixtures', 'pid']
         for program in programs:
             print(f"Processing program: {program}")
-            process(program, all = True)
-            #time_VI, error_VI, time_mcmc, error_mcmc, rhat, neff, time_degas, error_degas = process(program, all=True)
+            #process(program, all = True)
+            time_VI, error_VI, time_mcmc, error_mcmc, rhat, neff, time_degas, error_degas = process(program, all=True)
             # open a file results_all.csv (if exists, otherwise create) and append the results
-            #with open("results_all.csv", "a") as f:
-                #f.write(f"{program},{time_VI},{error_VI},{time_mcmc},{error_mcmc},{rhat},{neff},{time_degas},{error_degas}\n")
+            with open("results_all.csv", "a") as f:
+                f.write(f"{program},{time_VI},{error_VI},{time_mcmc},{error_mcmc},{rhat},{neff},{time_degas},{error_degas}\n")
     else:
         process(name)
