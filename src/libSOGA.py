@@ -30,7 +30,7 @@ def update_child(child, dist, p, trunc, exec_queue):
         child.set_p(p)
         child.set_trunc(trunc)
     if child not in exec_queue:
-        exec_queue.append(child)
+        exec_queue.append(child)  # Works with both list and deque
 
 def start_SOGA(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=None,useR=False):
     """ Invokes SOGA on the root of the CFG object cfg, initializing current_distribution to a Dirac delta centered in zero.
@@ -47,12 +47,13 @@ def start_SOGA(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=None,
     init_dist = Dist(var_list, gm)
     cfg.root.set_dist(init_dist)
     
-    # initializes visit queue
-    exec_queue = [cfg.root]
+    # initializes visit queue - use deque for O(1) pop operations instead of O(n) list.pop(0)
+    from collections import deque
+    exec_queue = deque([cfg.root])
     
     # executes SOGA on nodes on exec_queue
-    while(len(exec_queue)>0):
-        SOGA(exec_queue.pop(0), data, parallel, pruning, exec_queue, params_dict)
+    while len(exec_queue) > 0:
+        SOGA(exec_queue.popleft(), data, parallel, pruning, exec_queue, params_dict)
     
     # returns output distribution
     p, current_dist = merge(cfg.node_list['exit'].list_dist)
@@ -66,20 +67,32 @@ def start_SOGAGPU(cfg, params_dict={}, pruning='classic', Kmax=None, parallel=No
     if(useR):
         initR()
 
-    # initializes current_dist
+    # Determine device from params_dict if available, otherwise default to CPU
+    device = 'cpu'
+    if params_dict and len(params_dict) > 0:
+        first_param = next(iter(params_dict.values()))
+        if isinstance(first_param, torch.Tensor):
+            param_device = first_param.device
+            if param_device.type == 'cuda':
+                device = f'cuda:{param_device.index}'
+            else:
+                device = 'cpu'
+
+    # initializes current_dist on the correct device
     var_list = cfg.ID_list
     data = cfg.data
     n_dim = len(var_list)
-    gm = GaussianMixGPU(torch.tensor([[1.]]), torch.zeros((1,n_dim)), EPS*torch.eye(n_dim).reshape(1,n_dim, n_dim))
+    gm = GaussianMixGPU(torch.tensor([[1.]], device=device), torch.zeros((1,n_dim), device=device), EPS*torch.eye(n_dim, device=device).reshape(1,n_dim, n_dim))
     init_dist = DistGPU(var_list, gm)
     cfg.root.set_dist(init_dist)
     
-    # initializes visit queue
-    exec_queue = [cfg.root]
-    
+    # initializes visit queue - use deque for O(1) popleft
+    from collections import deque
+    exec_queue = deque([cfg.root])
+
     # executes SOGA on nodes on exec_queue
-    while(len(exec_queue)>0):
-        SOGA(exec_queue.pop(0), data, parallel, pruning, exec_queue, params_dict)
+    while len(exec_queue) > 0:
+        SOGA(exec_queue.popleft(), data, parallel, pruning, exec_queue, params_dict)
     
     # returns output distribution
     p, current_dist = merge(cfg.node_list['exit'].list_dist)
@@ -105,7 +118,13 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
         
     # starts execution
     if node.type == 'entry':
-        update_child(node.children[0], node.dist, torch.tensor(1.), None, exec_queue)
+        # Get device from distribution for tensor creation
+        device = 'cpu'
+        if hasattr(node.dist, 'get_device'):
+            dist_device = node.dist.get_device()
+            if dist_device >= 0:
+                device = f'cuda:{dist_device}'
+        update_child(node.children[0], node.dist, torch.tensor(1., device=device), None, exec_queue)
             
     
     # if tests saves LBC and calls on children
@@ -124,9 +143,16 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
 
     # if loop saves checks the condition and decides which child node must be accessed
     if node.type == 'loop':
+        # Get device from distribution for tensor creation
+        device = 'cpu'
+        if hasattr(node.dist, 'get_device'):
+            dist_device = node.dist.get_device()
+            if dist_device >= 0:
+                device = f'cuda:{dist_device}'
+        
         # the first time is accessed set the value of the counter to 0 and converts node.const into a number
         if data[node.idx][0] is None:
-            data[node.idx][0] = torch.tensor(0.)
+            data[node.idx][0] = torch.tensor(0., device=device)
         if type(node.const) is str:
             if '[' in node.const:
                 data_name, data_idx = node.const.split('[')
@@ -137,9 +163,9 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
                 # data_idx is a number
                 else:
                     data_idx = int(data_idx)
-                node.const = torch.tensor(int(data[data_name][data_idx]))
+                node.const = torch.tensor(int(data[data_name][data_idx]), device=device)
             else:
-                node.const = torch.tensor(int(node.const))  
+                node.const = torch.tensor(int(node.const), device=device)  
         
         #print('Iteration {}, components {}'.format(data[node.idx][0], current_dist.gm.n_comp()))
 

@@ -31,9 +31,24 @@ def merge(list_dist):
         sigma_list.append(dist.gm.sigma)
     # if list is empty
     if len(p_list) == 0:
-        return torch.tensor(0.), list_dist[0][1]
+        # Get device from dist
+        device = list_dist[0][1].get_device() if hasattr(list_dist[0][1], 'get_device') else -1
+        if device >= 0:
+            device = f'cuda:{device}'
+        else:
+            device = 'cpu'
+        return torch.tensor(0., device=device), list_dist[0][1]
     # else
-    p = torch.stack(p_list).view(-1,1,1)
+    # Get device from first distribution
+    device = list_dist[0][1].get_device() if hasattr(list_dist[0][1], 'get_device') else -1
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
+    
+    p = torch.stack(p_list).view(-1,1,1).to(device)
+    # Note: pi_list can have different shapes (different numbers of components per distribution)
+    # so we need to use vstack with list comprehension - this is already efficient
     pi = torch.vstack([p[i]*pi_list[i] for i in range(len(p_list))])
     mu = torch.vstack(mu_list)
     sigma = torch.vstack(sigma_list)
@@ -43,10 +58,10 @@ def merge(list_dist):
     if current_p > TOL_PROB:
         pi = pi/current_p
     else:
-        current_p = torch.tensor(0.)
+        current_p = torch.tensor(0., device=device)
 
     # creates the new gm
-    new_gm = GaussianMix(pi, mu, sigma)
+    new_gm = GaussianMixGPU(pi, mu, sigma)
     new_gm.delete_zeros()
     
     return current_p, DistGPU(list_dist[0][1].var_list, new_gm)
@@ -71,24 +86,31 @@ def kmeans_prune(output_dist, Kmax):
         labels, _ = k_means(torch.clone(output_dist.gm.mu), Kmax)
 
         d = output_dist.gm.n_dim()
+        
+        # Get device from output_dist
+        device = output_dist.get_device()
+        if device >= 0:
+            device = f'cuda:{device}'
+        else:
+            device = 'cpu'
 
-        # computes the new weights
-        new_pis = torch.zeros(Kmax, 1)
+        # computes the new weights - create tensors directly on device
+        new_pis = torch.zeros(Kmax, 1, device=device)
         new_pis.scatter_add_(0, labels.view(-1, 1), output_dist.gm.pi)   # these are the weights of the new mixture
         normalized_pis = output_dist.gm.pi / new_pis[labels] # these are the weights normalized for each cluster
 
-        # computes the new means
+        # computes the new means - create tensors directly on device
         weighted_mus = output_dist.gm.mu * normalized_pis
-        new_mus = torch.zeros(Kmax, d)
+        new_mus = torch.zeros(Kmax, d, device=device)
         new_mus.scatter_add_(0, labels.view(-1, 1).expand(-1, d), weighted_mus)  # these are the means of the new mixture
 
-        # computes the new covariances
+        # computes the new covariances - create tensors directly on device
         diff = output_dist.gm.mu - new_mus[labels]
         weighted_sigmas = normalized_pis.view(-1, 1, 1) * output_dist.gm.sigma + torch.einsum('bi,bj->bij', diff, diff) * normalized_pis.view(-1, 1, 1)
-        new_sigmas = torch.zeros(Kmax, d, d)
+        new_sigmas = torch.zeros(Kmax, d, d, device=device)
         new_sigmas.scatter_add_(0, labels.view(-1, 1, 1).expand(-1, d, d), weighted_sigmas)
 
-        return DistGPU(output_dist.var_list, GaussianMix(new_pis, new_mus, new_sigmas))
+        return DistGPU(output_dist.var_list, GaussianMixGPU(new_pis, new_mus, new_sigmas))
 
 
 def k_means(points, k, max_iters=100, tol=1e-4):
@@ -101,8 +123,15 @@ def k_means(points, k, max_iters=100, tol=1e-4):
         distances = torch.cdist(points, centers)
         # Assign each point to the nearest center
         labels = torch.argmin(distances, dim=1)
-        # Compute new centers as the mean of assigned points
-        new_centers = torch.stack([points[labels == i].mean(dim=0) for i in range(k)])
+        # Compute new centers using scatter operations (more efficient than list comprehension)
+        # Create one-hot encoding for labels
+        device = points.device
+        one_hot = torch.zeros(points.size(0), k, device=device)
+        one_hot.scatter_(1, labels.unsqueeze(1), 1)
+        # Count points per cluster
+        counts = one_hot.sum(dim=0, keepdim=True).clamp(min=1)  # Avoid division by zero
+        # Compute weighted sum and divide by counts
+        new_centers = (one_hot.t() @ points) / counts.t()
         # Check for convergence
         if torch.all(torch.abs(new_centers - centers) < tol):
             break
@@ -132,7 +161,8 @@ def compute_matrix_mean(current_dist):
 
 def delete_indices(tensor, idx_list):
     """ Deletes elements from a tensor at the specified indices. """
-    mask = torch.ones(tensor.size(0), dtype=torch.bool)
+    # Create mask on same device as tensor
+    mask = torch.ones(tensor.size(0), dtype=torch.bool, device=tensor.device)
     mask[idx_list] = False  # Set the indices in idx_list to False
     return tensor[mask]
 
@@ -183,7 +213,7 @@ def classic_prune(current_dist, Kmax):
             n = current_dist.gm.n_comp()
             matrix_mu = compute_matrix_mean(current_dist)
             # Deletes the row and column of the merged components from the cost matrix
-            mask = torch.ones(cost_matrix.size(0), dtype=torch.bool)
+            mask = torch.ones(cost_matrix.size(0), dtype=torch.bool, device=cost_matrix.device)
             mask[[i,j]] = False  # Set the indices to remove as False
             cost_matrix = cost_matrix[mask][:, mask]
             # If number of components still too high adds a new row and column to the cost matrix, corresponding to the new component

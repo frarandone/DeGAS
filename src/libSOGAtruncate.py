@@ -9,6 +9,10 @@ import multiprocessing as mp
 
 pool=None
 
+# Cache of parsed TruncRule objects keyed by (data_id, params_id, var_list, trunc_string).
+# Safe when expressions don't use loop-variable data array accesses that vary per iteration.
+_trunc_cache = {}
+
 def normalize_weights(pi):
     """
     Normalized weights and returns the normalization factor
@@ -18,11 +22,19 @@ def normalize_weights(pi):
         new_pi = pi/norm_fact
     else:
         new_pi = pi
-        norm_fact = torch.tensor(0.)
+        # Create tensor on same device as pi
+        norm_fact = torch.tensor(0., device=pi.device)
     return norm_fact, new_pi
 
 def and_func(self, dist):
     """ Truncates the distribution to var > self.low and var < self.up """
+
+    # Get device from distribution
+    device = dist.get_device()
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
 
     ineq_coeff = self.coeff
     ineq_idx = torch.where(ineq_coeff != 0)[0][0]
@@ -32,9 +44,9 @@ def and_func(self, dist):
     # This function only works for "var > self.low and var < self.up" so there is no need
     # to extend the distribution and change variables
         
-    # STEP 1: creates the hyper-rectangle to integrate on
-    a = torch.ones(len(ineq_coeff))*(-INFTY)
-    b = torch.ones(len(ineq_coeff))*(INFTY)
+    # STEP 1: creates the hyper-rectangle to integrate on - create tensors directly on device
+    a = torch.ones(len(ineq_coeff), device=device) * (-INFTY)
+    b = torch.ones(len(ineq_coeff), device=device) * INFTY
     a[ineq_idx] = low_const
     b[ineq_idx] = up_const   
         
@@ -44,13 +56,13 @@ def and_func(self, dist):
     new_P, new_mu, new_sigma, indexes = compute_moments(dist.gm.mu, dist.gm.sigma, a, b, ineq_idx)
     # if the whole distribution has zero prob in the truncation
     if len(indexes) == 0:
-        return torch.tensor(0.), dist
+        return torch.tensor(0., device=device), dist
     
     # STEP 3: weights normalization
     new_pi = dist.gm.pi[indexes]*new_P.view(-1,1)
     norm_fact, norm_new_pi = normalize_weights(new_pi)
 
-    return norm_fact, DistGPU(dist.var_list, GaussianMix(norm_new_pi, new_mu, new_sigma))
+    return norm_fact, DistGPU(dist.var_list, GaussianMixGPU(norm_new_pi, new_mu, new_sigma))
 
 
 def or_func(self, dist):
@@ -78,47 +90,64 @@ def ineq_func(self, dist):
     else:
         device = 'cpu'
 
-    ineq_coeff = self.coeff
     ineq_const = self.const
-    
+
+    # Cache A and A_inv: they depend only on ineq_coeff which is fixed after parsing.
+    # Also cache device-specific versions to avoid repeated .to(device) allocations.
+    if not hasattr(self, '_A_cached'):
+        ineq_coeff = self.coeff
+        norm_val = torch.linalg.norm(ineq_coeff).item()
+        ineq_coeff_norm = ineq_coeff / norm_val
+        A_cpu = find_basis(ineq_coeff_norm)
+        self._A_cached = A_cpu
+        self._A_inv_cached = torch.linalg.inv(A_cpu)
+        self._norm_val = norm_val
+        self._n_dim = len(ineq_coeff_norm)
+        self._A_on_device = {}
+        self._A_inv_on_device = {}
+    if device not in self._A_on_device:
+        self._A_on_device[device] = self._A_cached.to(device)
+        self._A_inv_on_device[device] = self._A_inv_cached.to(device)
+    A = self._A_on_device[device]
+    A_inv = self._A_inv_on_device[device]
+
+    ineq_const = ineq_const / self._norm_val
+
     # creates extended distribution
     extended_gm = extend_dist(self, dist)
-        
+
     # here there was a part to deal with deltas, but we removed it because in torch everything is differentiable
 
     # STEP 1: change variables
-    norm = torch.linalg.norm(ineq_coeff)
-    ineq_coeff = ineq_coeff/norm
-    ineq_const = ineq_const/norm
-    A = find_basis(ineq_coeff).to(device)          
     transl_mu = torch.matmul(A, extended_gm.mu.unsqueeze(2)).squeeze(2)
-    transl_sigma = torch.matmul(torch.matmul(A, extended_gm.sigma), A.t())
-    transl_alpha = torch.zeros(len(ineq_coeff))
+    A_sigma = torch.matmul(A, extended_gm.sigma)
+    transl_sigma = torch.matmul(A_sigma, A.t())
+    transl_alpha = torch.zeros(self._n_dim, device=device)
     transl_alpha[0] = 1
 
     # I suppressed the parts in which we truncate only some variables
-        
+
     # STEP 2: creates the hyper-rectangle to integrate on
-    a = (torch.ones(len(transl_alpha))*(-INFTY)).to(device)
-    b = (torch.ones(len(transl_alpha))*(INFTY)).to(device)
+    a = torch.ones(self._n_dim, device=device) * (-INFTY)
+    b = torch.ones(self._n_dim, device=device) * INFTY
     if self.type=='>' or self.type=='>=':
         a[0] = ineq_const
     if self.type=='<' or self.type=='<=':
-        b[0] = ineq_const   
-        
+        b[0] = ineq_const
+
     # STEP 3: compute moments in the transformed coordinates
     # some components might have 0 prob in the truncation
     # indexes contains the indexes of the components that have non-zero probability
     new_P, new_transl_mu, new_transl_sigma, indexes = compute_moments(transl_mu, transl_sigma, a, b)
     # if the whole distribution has zero prob in the truncation
     if len(indexes) == 0:
-        return torch.tensor(0.), dist
-        
+        return torch.tensor(0., device=device), dist
+
     # STEP 4: goes back to older coordinates
     old_dim = len(dist.var_list)
-    A_inv = torch.linalg.inv(A)
     new_mu = torch.matmul(A_inv, new_transl_mu.unsqueeze(2)).squeeze(2)[:, :old_dim]
-    new_sigma = torch.matmul( torch.matmul(A_inv, new_transl_sigma), A_inv.t())[:, :old_dim,:old_dim]
+    A_inv_sigma = torch.matmul(A_inv, new_transl_sigma)
+    new_sigma = torch.matmul(A_inv_sigma, A_inv.t())[:, :old_dim,:old_dim]
     
     # STEP 5: weights normalization
     new_pi = extended_gm.pi[indexes]*new_P.view(-1,1)
@@ -130,6 +159,13 @@ def ineq_func(self, dist):
 def eq_func(self, dist):
     """ Invoked when observe(var == c) """
 
+    # Get device from distribution
+    device = dist.get_device()
+    if device >= 0:
+        device = f'cuda:{device}'
+    else:
+        device = 'cpu'
+
     eq_coeff = self.coeff
     eq_const = self.const
     
@@ -137,7 +173,7 @@ def eq_func(self, dist):
     # I suppressed the parts in which we truncate only some variables
     # observed and non-observed variables
     obs_idx = int(list(torch.where(eq_coeff!=0))[0][0])
-    select = (torch.arange(dist.gm.n_dim())!=obs_idx)
+    select = (torch.arange(dist.gm.n_dim(), device=device)!=obs_idx)
     # computes conditional cov and mean
     cond_sigma = torch.clone(dist.gm.sigma[:, select, :][:, :, select])
     cond_sigma = cond_sigma - (1/dist.gm.sigma[:,obs_idx,obs_idx]).view(-1,1,1)*torch.bmm(dist.gm.sigma[:,select,obs_idx].unsqueeze(2), dist.gm.sigma[:,obs_idx,select].unsqueeze(1))
@@ -148,17 +184,18 @@ def eq_func(self, dist):
     # normalizes weights
     norm_fact, norm_new_pi = normalize_weights(new_pi)
     # extends cond mu and sigma with values for observed bar (puts small variance to the observed variable)
-    new_cond_mu = torch.zeros((cond_mu.shape[0], cond_mu.shape[1]+1))
+    # Create tensors directly on device
+    new_cond_mu = torch.zeros((cond_mu.shape[0], cond_mu.shape[1]+1), device=device)
     new_cond_mu[:, :obs_idx] = cond_mu[:, :obs_idx]
-    new_cond_mu[:, obs_idx] = torch.ones(cond_mu.shape[0])*eq_const
+    new_cond_mu[:, obs_idx] = torch.ones(cond_mu.shape[0], device=device)*eq_const
     new_cond_mu[:, obs_idx+1:] = cond_mu[:, obs_idx:]
-    mask = torch.ones(cond_mu.shape[1] + 1, dtype=torch.bool)
+    mask = torch.ones(cond_mu.shape[1] + 1, dtype=torch.bool, device=device)
     mask[obs_idx] = False
-    new_cond_sigma = torch.zeros((cond_sigma.shape[0], cond_sigma.shape[1]+1, cond_sigma.shape[2]+1))
+    new_cond_sigma = torch.zeros((cond_sigma.shape[0], cond_sigma.shape[1]+1, cond_sigma.shape[2]+1), device=device)
     C = new_cond_sigma[:, mask, :]
     C[:, :, mask] = cond_sigma
     new_cond_sigma[:, mask, :] = C
-    new_cond_sigma[:, obs_idx, obs_idx] = torch.ones(cond_sigma.shape[0])*SMOOTH_EPS
+    new_cond_sigma[:, obs_idx, obs_idx] = torch.ones(cond_sigma.shape[0], device=device)*SMOOTH_EPS
     return norm_fact, DistGPU(dist.var_list, GaussianMixGPU(norm_new_pi, new_cond_mu, new_cond_sigma))
 
 
@@ -357,14 +394,27 @@ class TruncRule(TRUNCListener):
 
 def truncate(dist, trunc, data, params_dict):
     """ Given a distribution dist computes its truncation to trunc. Returns a pair norm_factor, new_dist where norm_factor is the probability mass of the original distribution dist on trunc and new_dist is a Dist object representing the (approximated) truncated distribution. """
-    if trunc == 'true':
-        return torch.tensor(1.), dist
-    elif trunc == 'false':
-        return torch.tensor(0.), dist
+    # Get device from distribution
+    device = dist.get_device()
+    if device >= 0:
+        device = f'cuda:{device}'
     else:
-        trunc_rule = trunc_parse(dist.var_list, trunc, data, params_dict)
-        trunc_func = trunc_rule.func
-        norm_fact, new_dist = trunc_func(dist)
+        device = 'cpu'
+
+    if trunc == 'true':
+        return torch.tensor(1., device=device), dist
+    elif trunc == 'false':
+        return torch.tensor(0., device=device), dist
+    else:
+        # Use id(params_dict) as cache key so different optimization runs don't share entries.
+        # Empty dicts (from or_func recursive calls) use None as key since they have no params.
+        params_id = id(params_dict) if params_dict else None
+        data_id = id(data) if data else None
+        cache_key = (data_id, params_id, tuple(dist.var_list), trunc)
+        if cache_key not in _trunc_cache:
+            _trunc_cache[cache_key] = trunc_parse(dist.var_list, trunc, data, params_dict)
+        trunc_rule = _trunc_cache[cache_key]
+        norm_fact, new_dist = trunc_rule.func(dist)
         return norm_fact, new_dist
 
     
@@ -385,34 +435,39 @@ def find_basis(alpha):
     """
     Given alpha (vector of the truncation) returns a matrix A giving the change of variable necessary to make alpha one of the axis
     """
-    
+    # Preserve device of input tensor
+    device = alpha.device
     u, s, v = torch.linalg.svd(alpha.reshape(1,alpha.shape[0]))
     alpha1 = v[:,1:]
     A = torch.vstack((alpha.reshape(1,alpha.shape[0]), alpha1.t()))
-    return A
+    # Ensure result is on same device (SVD should preserve device, but be explicit)
+    return A.to(device)
 
 
 def compute_moments(mu, sigma, a, b, idx=0):
     """
     Given a normal distribution with mean mu and covariance matrix sigma, truncated to [a,b], where all a_i=-np.inf and
-    all b_i=np.inf except at most one a_i or one b_i, computes exactly the mean and the covariance matrix of the 
-    truncated distribution
-    """        
+    all b_i=np.inf except at most one a_i or one b_i, computes exactly the mean and the covariance matrix of the
+    truncated distribution.
+
+    Inlined from prob/compute_mom1/compute_lower_mom/compute_mom2/compute_mom2_and to share
+    a single distributions.Normal object and reuse phi (log-density at bound) across all sub-computations.
+    """
     n = len(a)
     # truncation in one dimension
-    if n==1:
-        tn = TruncatedNormal(mu, torch.sqrt(sigma), a, b)
+    if n == 1:
+        tn = TruncatedNormalGPU(mu, torch.sqrt(sigma), a, b)
         new_P = tn.norm_const
         # excluding truncated components with probability 0
         indexes = torch.where(new_P > TOL_PROB)[0]
         if len(indexes) == 0:
             return new_P, mu, sigma, indexes
         # keeping only components with non-zero prob
-        new_tn = TruncatedNormal(mu[indexes], torch.sqrt(sigma[indexes]), a, b)
+        new_tn = TruncatedNormalGPU(mu[indexes], torch.sqrt(sigma[indexes]), a, b)
         new_mu = new_tn.mean()
         new_sigma = new_tn.var()
         return new_P[indexes], new_mu, new_sigma, indexes
-    
+
     # if in more dimensions applies Kan-Robotti formulas
     # first determines if the truncation is 'low' (i.e. x > c) or 'up' (i.e. x < c) or None if in and_func
     if a[idx] > -INFTY and b[idx] < INFTY:
@@ -420,23 +475,67 @@ def compute_moments(mu, sigma, a, b, idx=0):
     elif a[0] > -INFTY:
         trunc = 'low'
     else:
-        trunc = 'up'  
-    
-    new_P = prob(mu, sigma, a, b, idx)
+        trunc = 'up'
+
+    # ONE Normal shared by prob (cdf) and phi (log_prob) — avoids redundant construction and log_prob calls
+    norm = distributions.Normal(loc=mu[:, idx], scale=torch.sqrt(sigma[:, idx, idx]), validate_args=False)
+    new_P = norm.cdf(b[idx]) - norm.cdf(a[idx])
+
     # excluding truncated components with probability 0
     indexes = torch.where(new_P > TOL_PROB)[0]
     if len(indexes) == 0:
         return new_P, mu, sigma, indexes
-    # keeping only components with non-zero 
-    # computes first two order moments using the recurrence formulas of Kan-Robotti and stores them in a dictionary
-    new_mu = compute_mom1(mu[indexes], sigma[indexes], a, b, trunc, new_P[indexes], idx)
-    if trunc:
-        # returns the moments for the distribution of dimension n-1, in which the trunc_idx component has been removed
-        muj = compute_lower_mom(mu[indexes], sigma[indexes], a, b, trunc)
-        new_sigma = compute_mom2(mu[indexes], sigma[indexes], a, b, trunc, new_P[indexes], new_mu, muj)
-    else:  # and_func
-        new_sigma = compute_mom2_and(mu[indexes], sigma[indexes], a, b, new_P[indexes], new_mu, idx)
-    return new_P[indexes], new_mu, new_sigma, indexes
+
+    mu_k = mu[indexes]
+    sigma_k = sigma[indexes]
+    P_k = new_P[indexes]
+    c = mu_k.shape[0]
+    device = mu.device
+
+    if trunc is not None:
+        # ineq_func path: idx == 0; phi reused by both mom1 and mom2 — no second Normal needed
+        if trunc == 'low':
+            phi = norm.log_prob(a[0])[indexes].exp()   # (c_k,)
+            bound = a[0]
+            muj = mu_k[:, 1:] + ((a[0] - mu_k[:, 0]) / sigma_k[:, 0, 0]).view(-1, 1) * sigma_k[:, 1:][:, :, 0]
+        else:
+            phi = -norm.log_prob(b[0])[indexes].exp()  # (c_k,)
+            bound = b[0]
+            muj = mu_k[:, 1:] + ((b[0] - mu_k[:, 0]) / sigma_k[:, 0, 0]).view(-1, 1) * sigma_k[:, 1:][:, :, 0]
+
+        phi_over_P = phi / P_k
+        # inline compute_mom1 (idx == 0)
+        new_mu = mu_k + sigma_k[:, :, 0] * phi_over_P.unsqueeze(1)
+        # inline compute_mom2: adj = [bound, muj[0], ..., muj[n-2]], shape (c_k, n)
+        adj = torch.empty(c, n, device=device, dtype=mu.dtype)
+        adj[:, 0] = bound
+        adj[:, 1:] = muj
+        sigma_col0 = sigma_k[:, :, 0]
+        phi_adj_over_P = phi_over_P.unsqueeze(1) * adj
+        sigma_CT_over_P = sigma_k + torch.bmm(sigma_col0.unsqueeze(2), phi_adj_over_P.unsqueeze(1))
+        new_sigma = (torch.bmm(mu_k.unsqueeze(2), new_mu.unsqueeze(1))
+                     + sigma_CT_over_P
+                     - torch.bmm(new_mu.unsqueeze(2), new_mu.unsqueeze(1)))
+    else:
+        # and_func path: bounded interval at idx; phi_a and phi_b from same norm object
+        phi_a = norm.log_prob(a[idx])[indexes].exp()  # (c_k,)
+        phi_b = norm.log_prob(b[idx])[indexes].exp()  # (c_k,)
+        new_mu = mu_k + sigma_k[:, :, idx] * ((phi_a - phi_b) / P_k).unsqueeze(1)
+
+        muj_a = compute_muj(a, mu_k, sigma_k, idx)
+        muj_b = compute_muj(b, mu_k, sigma_k, idx)
+        adj_a = muj_a.clone()
+        adj_a[:, idx] = a[idx]
+        adj_b = muj_b.clone()
+        adj_b[:, idx] = b[idx]
+        correction_over_P = (phi_a.unsqueeze(1) * adj_a - phi_b.unsqueeze(1) * adj_b) / P_k.unsqueeze(1)
+        sigma_col_idx = sigma_k[:, :, idx]
+        sigma_CT_over_P = sigma_k + torch.bmm(sigma_col_idx.unsqueeze(2), correction_over_P.unsqueeze(1))
+        new_sigma = (torch.bmm(mu_k.unsqueeze(2), new_mu.unsqueeze(1))
+                     + sigma_CT_over_P
+                     - torch.bmm(new_mu.unsqueeze(2), new_mu.unsqueeze(1)))
+
+    return P_k, new_mu, new_sigma, indexes
 
 
 def compute_lower_mom(mu, sigma, a, b, trunc):
@@ -455,96 +554,107 @@ def compute_lower_mom(mu, sigma, a, b, trunc):
 
 def prob(mu, sigma, a, b, idx=0):
     """
-    Computes the mass probability of the normal distribution with mean mu and covariance matrix sigma in the 
+    Computes the mass probability of the normal distribution with mean mu and covariance matrix sigma in the
     hyper-rectangle [a,b].
     Even for one-dimensional distributions, mu, sigma, a, b must be vectors.
-    """ 
-    norm = distributions.Normal(loc=mu[:,idx], scale=torch.sqrt(sigma[:,idx,idx]))
+    """
+    norm = distributions.Normal(loc=mu[:,idx], scale=torch.sqrt(sigma[:,idx,idx]), validate_args=False)
     P = norm.cdf(b[idx]) - norm.cdf(a[idx])
     return P
 
 
 def compute_mom1(mu, sigma, a, b, trunc, P, idx=0):
-
-    assert mu.get_device() == sigma.get_device() == a.get_device() == b.get_device()
-    device = mu.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
-    if device >= 0:
-        device = f'cuda:{device}'
-    else:
-        device = 'cpu'
-
-    # print(mu)
-    # print(sigma)
-    # print(a)
-    # print(b)
-    # print(trunc)
-    # print(P)
-
-    c = torch.zeros(mu.shape).to(device)
-    norm = distributions.Normal(mu[:,idx], scale=torch.sqrt(sigma[:,idx,idx]))
+    # sigma[:,j,col] selects column `col` of each covariance matrix: shape (c, n_dim)
+    # matmul(sigma, c) where c has only one non-zero entry at position `col` equals sigma[:,:,col]*c[col]
+    # This avoids allocating the zero matrix c and the O(n_dim^2) matmul per component.
+    norm = distributions.Normal(mu[:, idx], scale=torch.sqrt(sigma[:, idx, idx]), validate_args=False)
     if trunc:
         if trunc == 'low':
-            c[:,0] = norm.log_prob(a[0]).exp()
-        elif trunc == 'up':
-            c[:,0] = -norm.log_prob(b[0]).exp()
-        return mu + torch.matmul(sigma, c.unsqueeze(2)).squeeze(2)/P.view(-1,1)
+            phi = norm.log_prob(a[0]).exp()        # (c,)
+        else:  # 'up'
+            phi = -norm.log_prob(b[0]).exp()       # (c,)
+        return mu + sigma[:, :, 0] * (phi / P).unsqueeze(1)
     else:   # for and_func
-        c[:,idx] = norm.log_prob(a[idx]).exp() - norm.log_prob(b[idx]).exp()
-        return mu + torch.matmul(sigma, c.unsqueeze(2)).squeeze(2)/P.view(-1,1) 
+        phi = norm.log_prob(a[idx]).exp() - norm.log_prob(b[idx]).exp()  # (c,)
+        return mu + sigma[:, :, idx] * (phi / P).unsqueeze(1)
 
 def compute_mom2(mu, sigma, a, b, trunc, new_P, new_mu, muj):
-
-    assert mu.get_device() == sigma.get_device() == a.get_device() == b.get_device() == muj.get_device()
-    device = mu.get_device() # pytorch tensor get_device returns GPU id 0,1,etc or -1 (eg for CPU)
-    if device >= 0:
-        device = f'cuda:{device}'
-    else:
-        device = 'cpu'
-
     # vector dimensions
-    n = len(a)    # number of variables
+    n = len(a)      # number of variables
     c = mu.shape[0] # number of components
-    # creates auxialiary vectors
-    e0 = torch.zeros((c,n)).to(device)
-    e0[:,0] = torch.ones(c)
-    C = (new_P.view(c,1,1))*torch.eye(n).to(device).unsqueeze(0).expand(c,-1,-1)
-    norm = distributions.Normal(loc=mu[:,0], scale=torch.sqrt(sigma[:,0,0]))
+    device = mu.device
+
+    # Closed-form for sigma @ C^T avoids building the full (c,n,n) matrix C.
+    # C = diag(new_P) * I + rank-1 correction in column 0.
+    # sigma @ C^T = new_P * sigma + outer(sigma[:,col0], phi * adj)
+    # where adj[i] = [bound, muj[i,0], muj[i,1], ...] (a length-n vector per component).
+    norm = distributions.Normal(loc=mu[:, 0], scale=torch.sqrt(sigma[:, 0, 0]), validate_args=False)
     if trunc == 'low':
-        C[:,:,0] += norm.log_prob(a[0]).exp().view(-1,1)*(a[0]**e0)*torch.hstack((torch.ones((c,1)).to(device), muj))
-    elif trunc == 'up':
-        C[:,:,0] += -norm.log_prob(b[0]).exp().view(-1,1)*(b[0]**e0)*torch.hstack((torch.ones((c,1)).to(device), muj))
-    # computes the new matrix
-    new_sigma = new_P.view(c,1,1)*torch.matmul(mu.unsqueeze(2), new_mu.unsqueeze(1)) + torch.matmul(sigma, C.transpose(1,2))
-    new_sigma = new_sigma/new_P.view(c,1,1) - torch.matmul(new_mu.unsqueeze(2), new_mu.unsqueeze(1))
-    return new_sigma 
+        phi = norm.log_prob(a[0]).exp()    # (c,)
+        bound = a[0]
+    else:  # 'up'
+        phi = -norm.log_prob(b[0]).exp()   # (c,)
+        bound = b[0]
+
+    # adj[i] = [bound, muj[i,0], ..., muj[i,n-2]]  shape (c, n)
+    adj = torch.empty(c, n, device=device, dtype=mu.dtype)
+    adj[:, 0] = bound
+    adj[:, 1:] = muj
+
+    # sigma @ C^T / new_P = sigma + outer(sigma_col0, phi * adj / new_P)
+    # Divide phi_adj by new_P first (O(c*n)) to avoid allocating new_P*sigma and then dividing.
+    sigma_col0 = sigma[:, :, 0]                                        # (c, n)
+    phi_adj_over_P = (phi / new_P).unsqueeze(1) * adj                  # (c, n)
+    sigma_CT_over_P = sigma + torch.bmm(sigma_col0.unsqueeze(2), phi_adj_over_P.unsqueeze(1))
+
+    new_sigma = torch.bmm(mu.unsqueeze(2), new_mu.unsqueeze(1)) + sigma_CT_over_P - torch.bmm(new_mu.unsqueeze(2), new_mu.unsqueeze(1))
+    return new_sigma
 
 # New functions to compute and/or truncations
 
 def compute_mom2_and(mu, sigma, a, b, new_P, new_mu, idx):
     # vector dimensions
-    n = len(a)    # number of variables
+    device = mu.device
+    n = len(a)      # number of variables
     c = mu.shape[0] # number of components
-    # creates auxialiary vectors
-    e0 = torch.zeros((c,n))
-    e0[:,idx] = torch.ones(c)
-    C = (new_P.view(c,1,1))*torch.eye(n).unsqueeze(0).expand(c,-1,-1)
-    norm = distributions.Normal(loc=mu[:,idx], scale=torch.sqrt(sigma[:,idx,idx]))
-    C[:, :, idx] += norm.log_prob(a[idx]).exp().view(-1,1)*(a[idx]**e0)*compute_muj(a, mu, sigma, idx) - norm.log_prob(b[idx]).exp().view(-1,1)*(b[idx]**e0)*compute_muj(b, mu, sigma, idx)
-    # computes the new matrix
-    new_sigma = new_P.view(c,1,1)*torch.matmul(mu.unsqueeze(2), new_mu.unsqueeze(1)) + torch.matmul(sigma, C.transpose(1,2))
-    new_sigma = new_sigma/new_P.view(c,1,1) - torch.matmul(new_mu.unsqueeze(2), new_mu.unsqueeze(1))
-    return new_sigma 
+
+    # Same rank-1 structure as compute_mom2, but correction applies to column `idx`.
+    # sigma @ C^T = new_P * sigma + outer(sigma[:,idx], correction)
+    # correction[i,j] = phi_a[i]*adj_a[i,j] - phi_b[i]*adj_b[i,j]
+    # adj_a[i,j]: column idx gets a[idx], other columns get muj_a[i,j]
+    # adj_b[i,j]: column idx gets b[idx], other columns get muj_b[i,j]
+    norm = distributions.Normal(loc=mu[:, idx], scale=torch.sqrt(sigma[:, idx, idx]), validate_args=False)
+    phi_a = norm.log_prob(a[idx]).exp()   # (c,)
+    phi_b = norm.log_prob(b[idx]).exp()   # (c,)
+
+    muj_a = compute_muj(a, mu, sigma, idx)  # (c, n), position idx == 1 (ones)
+    muj_b = compute_muj(b, mu, sigma, idx)  # (c, n), position idx == 1 (ones)
+
+    # Override column idx with the actual bound value (a[idx]**1 = a[idx], not the 1 from new_muj)
+    adj_a = muj_a.clone()
+    adj_a[:, idx] = a[idx]
+    adj_b = muj_b.clone()
+    adj_b[:, idx] = b[idx]
+
+    correction_over_P = (phi_a.unsqueeze(1) * adj_a - phi_b.unsqueeze(1) * adj_b) / new_P.unsqueeze(1)  # (c, n)
+
+    sigma_col_idx = sigma[:, :, idx]   # (c, n): column idx of each covariance matrix
+    sigma_CT_over_P = sigma + torch.bmm(sigma_col_idx.unsqueeze(2), correction_over_P.unsqueeze(1))
+
+    new_sigma = torch.bmm(mu.unsqueeze(2), new_mu.unsqueeze(1)) + sigma_CT_over_P - torch.bmm(new_mu.unsqueeze(2), new_mu.unsqueeze(1))
+    return new_sigma
 
 def compute_muj(a, mu, sigma, idx):
     # mask excluding index idx
-    mask = torch.ones(len(a), dtype=torch.bool)
+    device = mu.device
+    mask = torch.ones(len(a), dtype=torch.bool, device=device)
     mask[idx] = False
-    
+
     mu_minusj = mu[:, mask]
     sigmaj = sigma[:, mask][:, :, idx]
     muj = mu_minusj + ((a[idx]-mu[:,idx])/sigma[:,idx,idx]).view(-1,1)*sigmaj
 
-    new_muj = torch.ones(mu.shape)
+    new_muj = torch.ones(mu.shape, device=device)
     new_muj[:, :idx] = muj[:, :idx]
     new_muj[:, idx+1:] = muj[:, idx:]
 
