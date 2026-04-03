@@ -142,8 +142,9 @@ class GaussianMix():
         return cdf
     
     def marg_cdf(self, x, idx):
-        comp_cdfs = torch.stack([self.marg_comp_cdf(x, k, idx) for k in range(self.n_comp())], dim=1)
-        cdf = torch.matmul(comp_cdfs, self.pi.view(-1, 1))
+        x = torch.as_tensor(x, dtype=self.mu.dtype, device=self.mu.device)
+        comp_cdfs = torch.stack([self.marg_comp_cdf(x, k, idx) for k in range(self.n_comp())], dim=-1)
+        cdf = torch.matmul(comp_cdfs, self.pi)
         return cdf
       
     
@@ -198,6 +199,83 @@ class Dist():
         return str(self)
 
 ### CDF FUNCTION OF MULTIVARIATE GAUSSIAN
+
+def ghk_mvnorm_prob(mu, sigma, A, B, n_samples=10000, jitter=1e-8, generator=None):
+    """
+    Estimate P(A < X < B) for X ~ N(mu, sigma) with the GHK simulator.
+
+    The bounds are centered internally by subtracting mu, so the algorithm
+    runs on the equivalent zero-mean Gaussian.
+    """
+    mu = torch.as_tensor(mu)
+    sigma = torch.as_tensor(sigma, dtype=mu.dtype, device=mu.device)
+    A = torch.as_tensor(A, dtype=mu.dtype, device=mu.device).reshape(-1)
+    B = torch.as_tensor(B, dtype=mu.dtype, device=mu.device).reshape(-1)
+    mu = mu.reshape(-1)
+
+    if mu.shape != A.shape or mu.shape != B.shape:
+        raise ValueError("mu, A and B must have the same shape")
+    if sigma.shape != (mu.numel(), mu.numel()):
+        raise ValueError("sigma must have shape (k, k) where k = len(mu)")
+    if torch.any(A >= B):
+        return torch.zeros((), dtype=mu.dtype, device=mu.device)
+    if n_samples <= 0:
+        raise ValueError("n_samples must be positive")
+
+    centered_A = A - mu
+    centered_B = B - mu
+
+    sigma = make_sym(sigma)
+    eye = torch.eye(mu.numel(), dtype=mu.dtype, device=mu.device)
+    chol = None
+    current_jitter = jitter
+    for _ in range(6):
+        chol, info = torch.linalg.cholesky_ex(sigma + current_jitter * eye)
+        if info.item() == 0:
+            break
+        current_jitter *= 10
+    if chol is None or info.item() != 0:
+        raise ValueError("sigma is not positive definite, even after diagonal jitter")
+
+    normal = distributions.Normal(
+        torch.tensor(0.0, dtype=mu.dtype, device=mu.device),
+        torch.tensor(1.0, dtype=mu.dtype, device=mu.device),
+    )
+    finfo = torch.finfo(mu.dtype)
+    u_eps = max(finfo.eps, 1e-12)
+
+    dim = mu.numel()
+    eps = torch.zeros((n_samples, dim), dtype=mu.dtype, device=mu.device)
+    log_q = torch.zeros(n_samples, dtype=mu.dtype, device=mu.device)
+    alive = torch.ones(n_samples, dtype=torch.bool, device=mu.device)
+
+    for i in range(dim):
+        if i == 0:
+            shift = torch.zeros(n_samples, dtype=mu.dtype, device=mu.device)
+        else:
+            shift = eps[:, :i] @ chol[i, :i]
+
+        a_i = centered_A[i] - shift
+        b_i = centered_B[i] - shift
+        alpha = a_i / chol[i, i]
+        beta = b_i / chol[i, i]
+
+        cdf_alpha = normal.cdf(alpha)
+        cdf_beta = normal.cdf(beta)
+        q_i = cdf_beta - cdf_alpha
+
+        valid = torch.isfinite(q_i) & (q_i > 0)
+        alive = alive & valid
+        safe_q_i = torch.where(valid, q_i, torch.ones_like(q_i))
+        log_q = log_q + torch.where(valid, torch.log(safe_q_i), torch.zeros_like(log_q))
+
+        u = torch.rand(n_samples, dtype=mu.dtype, device=mu.device, generator=generator)
+        truncated_u = cdf_alpha + u * safe_q_i
+        truncated_u = torch.clamp(truncated_u, min=u_eps, max=1 - u_eps)
+        eps[:, i] = torch.where(alive, normal.icdf(truncated_u), torch.zeros_like(truncated_u))
+
+    weights = torch.where(alive, torch.exp(log_q), torch.zeros_like(log_q))
+    return weights.mean()
 
 def mvncdf(x, mean, cov):
     # Ensure x has a batch dimension
