@@ -65,6 +65,7 @@ def SOGA(node, data, parallel, pruning, exec_queue, params_dict):
     #print('Entering', node)        
     #    print(node.dist.gm.n_comp(), ' components')
     #    print(check_dist_non_deg(node.dist))
+    #if node.dist is not None:
     #    print(node.dist)
     #    print('mean', node.dist.gm.mean())
     #    print('cov', node.dist.gm.cov())

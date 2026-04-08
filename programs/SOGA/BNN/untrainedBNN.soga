@@ -1,0 +1,135 @@
+/* input to first layer 1 -> 4 */
+w01 = gauss(0,1);
+w02 = gauss(0,1);
+w03 = gauss(0,1);
+w04 = gauss(0,1);
+b01 = gauss(0,1);
+b02 = gauss(0,1);
+b03 = gauss(0,1);
+b04 = gauss(0,1);
+
+/* First to second layer 4 -> 4*/
+w11 = gauss(0,1);
+w12 = gauss(0,1);
+w13 = gauss(0,1);
+w14 = gauss(0,1);
+b1 = gauss(0,1);
+
+w21 = gauss(0,1);
+w22 = gauss(0,1);
+w23 = gauss(0,1);
+w24 = gauss(0,1);
+b2 = gauss(0,1);
+
+w31 = gauss(0,1);
+w32 = gauss(0,1);
+w33 = gauss(0,1);
+w34 = gauss(0,1);
+b3 = gauss(0,1);
+
+w41 = gauss(0,1);
+w42 = gauss(0,1);
+w43 = gauss(0,1);
+w44 = gauss(0,1);
+b4 = gauss(0,1);
+
+/* Second to output 4 -> 1*/
+
+w1 = gauss(0,1);
+w2 = gauss(0,1);
+w3 = gauss(0,1);
+w4 = gauss(0,1);
+b5 = gauss(0,1);
+
+/* Second to output 4 -> 1*/
+
+w1 = gauss(0.0239, 0.8961);
+w2 = gauss(0.0239, 0.8961);
+w3 = gauss(0.0239, 0.8961);
+w4 = gauss(0.0239, 0.8961);
+b5 = gauss(0., 1.);
+
+/* Forward 1 */
+
+a01 = _x * w01 + b01;
+a02 = _x * w02 + b02;
+a03 = _x * w03 + b03;
+a04 = _x * w04 + b04;
+
+if a01 < 0.0 {
+    a01 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+if a02 < 0.0 {
+    a02 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+if a03 < 0.0 {
+    a03 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+if a04 < 0.0 {
+    a04 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+t1 = w11*a01;
+t2 = w12*a02;
+t3 = w13*a03;
+t4 = w14*a04;
+a1 = t1 + t2 +t3 +t4 + b1;
+
+t1 = w21*a01;
+t2 = w22*a02;
+t3 = w23*a03;
+t4 = w24*a04;
+a2 = t1 + t2 +t3 +t4 + b2;
+
+t1 = w31*a01;
+t2 = w32*a02;
+t3 = w33*a03;
+t4 = w34*a04;
+a3 = t1 + t2 +t3 +t4 + b3;
+
+t1 = w41*a01;
+t2 = w42*a02;
+t3 = w43*a03;
+t4 = w44*a04;
+a4 = t1 + t2 +t3 +t4 + b4;
+
+if a1 < 0.0 {
+    a1 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+if a2 < 0.0 {
+    a2 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+if a3 < 0.0 {
+    a3 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+if a4 < 0.0 {
+    a4 = gauss(0., 0.01);
+} else {
+    skip;
+} end if;
+
+t1 = w1*a1;
+t2 = w2*a2;
+t3 = w3*a3;
+t4 = w4*a4;
+y = t1 + t2 +t3 +t4 + b4;

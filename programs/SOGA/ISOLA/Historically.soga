@@ -1,0 +1,49 @@
+array[31] T;
+
+currT = 18;
+isOn = -1;
+
+/* formula is phi := historically(T < const) */
+phi = 20.2 - currT;
+
+/* initial value should be calculated explicitly,
+it is true at the initial state. */
+
+for i in range(31) {
+
+    T[i] = currT;
+
+    /* Temperature update */
+    if isOn > 0 {
+        newT = 0.99*currT + 0.5 + gauss(0., 0.1);
+    } else {
+        newT = 0.99*currT + gauss(0., 0.1);
+    } end if;
+
+    currT = newT;         
+
+    /* Check on thermostat */
+    if isOn > 0 {
+        if newT > 20 {
+            isOn = -1;          
+        } else {
+            skip;
+        } end if;
+    } else {
+        if newT < 17 {
+            isOn = 1;          
+        } else {
+            skip;
+        } end if;
+    } end if;
+
+    /*robust semantics*/
+    atom = 20.2 - newT;
+    test = atom - phi;
+    if test < 0 {
+        phi = atom;
+    } else {
+        skip;
+    } end if;
+
+} end for;

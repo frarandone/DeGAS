@@ -1,0 +1,21 @@
+/* OU with Boolean monitor */
+
+currX = -2.0;
+phi  = currX - 2.1;
+
+
+for i in range(30) {
+
+    newX = 0.88*currX + 0.24 + gauss(0., 0.0484);
+    
+    atom = newX - 2.1;
+    check = phi - atom;
+    if check < 0.0 {
+        phi = atom;
+    } else {
+        skip;
+    } end if;
+    
+    currX = newX;
+
+} end for;

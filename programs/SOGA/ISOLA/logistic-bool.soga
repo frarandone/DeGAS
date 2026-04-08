@@ -1,0 +1,22 @@
+/* logistic with Boolean monitor for eventually globally x > 9.75 */
+
+currX = 0.8;
+/* atom is x > 9.75 */
+phi = 0;
+
+for i in range(35){
+
+    xSquare = currX * currX;
+    noise = gauss(0., 0.01);
+    xNoise = currX * noise;
+    newX = 1.22*currX - 0.022 * xSquare + xNoise;
+
+    if newX > 9.75{
+        phi = 1;
+    } else {
+        phi = 0;
+    } end if;
+
+    currX = newX;
+
+} end for;

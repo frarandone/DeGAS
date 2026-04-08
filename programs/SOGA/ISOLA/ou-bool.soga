@@ -1,0 +1,18 @@
+/* OU with Boolean monitor */
+
+X = -2;
+
+
+for i in range(30) {
+
+    X = 0.8*X + 0.4 + gauss(0., 0.0484);
+   
+   if X > 2.1 {
+        phi = 1;
+   } else {
+        skip;
+   } end if; 
+
+} end for;
+
+

@@ -140,7 +140,10 @@ def smooth_asgmt(node, var_list, smoothed_vars, data, smooth_eps):
     
     if new_orig_expr:
         node.smooth = new_orig_expr
-
+    else:
+        # if the current asgmt is not to be smoothed, the target_var can be removed from smoothed_vars
+        if target_var in smoothed_vars:
+            smoothed_vars.remove(target_var)
 
 # FUNCTIONS FOR SMOOTHING TRUNCATIONS
 

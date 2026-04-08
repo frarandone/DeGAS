@@ -1,0 +1,16 @@
+array[50] X;
+
+currX = 0.8;
+
+for i in range(50) {
+
+    X[i] = currX;
+    xSquare = currX * currX;
+    noise = gauss(0., 0.01);
+    xNoise = currX * noise;
+    newX = 1.22*currX - 0.022 * xSquare + xNoise;
+
+    currX = newX;
+
+} end for;
+

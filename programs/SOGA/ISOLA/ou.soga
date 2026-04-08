@@ -1,0 +1,16 @@
+/* OU with Boolean monitor */
+
+array[50] X;
+currX = -2.0;
+phi  = 0;
+
+
+for i in range(50) {
+
+     X[i] = currX;
+     newX = 0.88*currX + 0.24 + gauss(0., 0.0484);
+     currX = newX;
+
+} end for;
+
+
