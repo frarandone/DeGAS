@@ -1,3 +1,0 @@
-x = gauss(0,1);
-y = gauss(0,2);
-z = x+y;
