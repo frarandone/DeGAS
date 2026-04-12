@@ -1,0 +1,22 @@
+[project]
+name = "pydegas"
+version = "0.0.0"
+description = "Sample-free, gradient-based optimization for loop-free probabilistic programs: differentiable Gaussian-mixture (SOGA/DeGAS) semantics with PyTorch—no Monte Carlo in the optimization loop."
+readme = "README.md"
+authors = []
+requires-python = ">=3.12"
+dependencies = [
+    "attrs>=26.1.0",
+    "torch>=2.0",
+    "botorch>=0.9",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "antlr4-python3-runtime==4.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.8"]
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
