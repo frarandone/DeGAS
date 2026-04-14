@@ -47,5 +47,5 @@ repos:
     rev: 0.9.5
     hooks:
       - id: uv-lock
-        files: pydegas/pyproject.toml
-        args: ["--project", "pydegas"]
+        files: libs/pydegas/pyproject.toml
+        args: ["--project", "libs/pydegas"]
