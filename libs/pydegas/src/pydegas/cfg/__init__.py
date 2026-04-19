@@ -10,11 +10,15 @@ from pydegas.cfg.nodes import (
     StateNode,
     TestNode,
 )
+from pydegas.cfg.smoother import negate, smooth
 
 
 __all__ = [
     # graph
     "ControlFlowGraph",
+    # smoother
+    "smooth",
+    "negate",
     # nodes
     "CFGNode",
     "EntryNode",
