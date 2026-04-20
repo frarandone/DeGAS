@@ -1,0 +1,46 @@
+array[50] X;
+
+currX = 0.8;
+
+
+/*
+_r = 0.22;
+_k = 10.0;
+_sigma = 0.18;
+*/
+
+/* formula is
+array[50] atom;
+array[50] globally;
+eventually = 0;
+atom = currX - 10.0;
+*/
+
+/* phi = 0; */
+
+
+/* initial value should be calculated explicitly. */
+
+/* x' = x + r*x*(1-x/k) + x*gaussian(0,sigma^2) */
+
+
+for i in range(50) {
+
+    X[i] = currX;
+    xSquare = currX * currX;
+    noise = gauss(0., 0.0324);
+    xNoise = currX * noise;
+    newX = 1.22 * currX - 0.022 * xSquare + xNoise;
+
+    currX = newX;
+
+
+} end for;
+
+/*???
+if newX > 9.75 {
+    phi = 1;
+} else {
+    phi = 0;
+} end if;
+*/
