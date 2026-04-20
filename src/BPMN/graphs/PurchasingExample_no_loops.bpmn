@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" targetNamespace="http://www.signavio.com/bpmn20" typeLanguage="http://www.w3.org/2001/XMLSchema" expressionLanguage="http://www.w3.org/1999/XPath">
+  <bpmn:process id="purchasing_no_loops" isClosed="false" isExecutable="false" processType="None">
+    <bpmn:startEvent id="start" name="start">
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="t0" name="Create Purchase Requisition">
+      <bpmn:incoming>f0</bpmn:incoming>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g0" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t1" name="Analyze Purchase Requisition">
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g1" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t2" name="Amend Purchase Requisition">
+      <bpmn:incoming>f7</bpmn:incoming>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g2" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:incoming>f8</bpmn:incoming>
+      <bpmn:outgoing>f9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t3" name="Create Request for Quotation">
+      <bpmn:incoming>f9</bpmn:incoming>
+      <bpmn:outgoing>f10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t4" name="Analyze Request for Quotation">
+      <bpmn:incoming>f10</bpmn:incoming>
+      <bpmn:outgoing>f11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g3" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f11</bpmn:incoming>
+      <bpmn:outgoing>f12</bpmn:outgoing>
+      <bpmn:outgoing>f13</bpmn:outgoing>
+      <bpmn:outgoing>f14</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t5" name="Amend Request for Quotation">
+      <bpmn:incoming>f12</bpmn:incoming>
+      <bpmn:outgoing>f15</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g4" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f14</bpmn:incoming>
+      <bpmn:incoming>f15</bpmn:incoming>
+      <bpmn:outgoing>f16</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t6" name="Send Request for Quotation to Supplier">
+      <bpmn:incoming>f16</bpmn:incoming>
+      <bpmn:outgoing>f17</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t7" name="Create Quotation comparison Map">
+      <bpmn:incoming>f17</bpmn:incoming>
+      <bpmn:outgoing>f18</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t8" name="Analyze Quotation Comparison Map">
+      <bpmn:incoming>f18</bpmn:incoming>
+      <bpmn:outgoing>f19</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t9" name="Choose best option">
+      <bpmn:incoming>f19</bpmn:incoming>
+      <bpmn:outgoing>f20</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t10" name="Settle Conditions With Supplier">
+      <bpmn:incoming>f20</bpmn:incoming>
+      <bpmn:outgoing>f21</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t11" name="Create Purchase Order">
+      <bpmn:incoming>f21</bpmn:incoming>
+      <bpmn:outgoing>f22</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t12" name="Confirm Purchase Order">
+      <bpmn:incoming>f22</bpmn:incoming>
+      <bpmn:outgoing>f23</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t13" name="Deliver Goods Services">
+      <bpmn:incoming>f23</bpmn:incoming>
+      <bpmn:outgoing>f24</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t14" name="Release Purchase Order">
+      <bpmn:incoming>f24</bpmn:incoming>
+      <bpmn:outgoing>f25</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g5" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f25</bpmn:incoming>
+      <bpmn:outgoing>f26</bpmn:outgoing>
+      <bpmn:outgoing>f27</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t18a" name="Settle Dispute With Supplier">
+      <bpmn:incoming>f27</bpmn:incoming>
+      <bpmn:outgoing>f28</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g6" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f26</bpmn:incoming>
+      <bpmn:incoming>f28</bpmn:incoming>
+      <bpmn:outgoing>f29</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t15" name="Approve Purchase Order for payment">
+      <bpmn:incoming>f29</bpmn:incoming>
+      <bpmn:outgoing>f30</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t16" name="Send Invoice">
+      <bpmn:incoming>f30</bpmn:incoming>
+      <bpmn:outgoing>f31</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g7" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f31</bpmn:incoming>
+      <bpmn:outgoing>f32</bpmn:outgoing>
+      <bpmn:outgoing>f33</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t17" name="Release Supplier's Invoice">
+      <bpmn:incoming>f33</bpmn:incoming>
+      <bpmn:outgoing>f34</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g8" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f34</bpmn:incoming>
+      <bpmn:outgoing>f35</bpmn:outgoing>
+      <bpmn:outgoing>f36</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t18b" name="Settle Dispute With Supplier">
+      <bpmn:incoming>f36</bpmn:incoming>
+      <bpmn:outgoing>f37</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="g9" gatewayDirection="Unspecified" name="">
+      <bpmn:incoming>f32</bpmn:incoming>
+      <bpmn:incoming>f35</bpmn:incoming>
+      <bpmn:incoming>f37</bpmn:incoming>
+      <bpmn:outgoing>f38</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t19" name="Authorize Supplier's Invoice payment">
+      <bpmn:incoming>f38</bpmn:incoming>
+      <bpmn:outgoing>f39</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t20" name="Pay Invoice">
+      <bpmn:incoming>f39</bpmn:incoming>
+      <bpmn:outgoing>f40</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end" name="end">
+      <bpmn:incoming>f40</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="end_pr" name="end after PR analysis">
+      <bpmn:incoming>f5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="end_rfq" name="end after RFQ analysis">
+      <bpmn:incoming>f13</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="start" targetRef="t0" name=""/>
+    <bpmn:sequenceFlow id="f1" sourceRef="t0" targetRef="g0" name=""/>
+    <bpmn:sequenceFlow id="f2" sourceRef="g0" targetRef="t1" name=""/>
+    <bpmn:sequenceFlow id="f3" sourceRef="g0" targetRef="g2" name=""/>
+    <bpmn:sequenceFlow id="f4" sourceRef="t1" targetRef="g1" name=""/>
+    <bpmn:sequenceFlow id="f5" sourceRef="g1" targetRef="end_pr" name=""/>
+    <bpmn:sequenceFlow id="f6" sourceRef="g1" targetRef="g2" name=""/>
+    <bpmn:sequenceFlow id="f7" sourceRef="g1" targetRef="t2" name=""/>
+    <bpmn:sequenceFlow id="f8" sourceRef="t2" targetRef="g2" name=""/>
+    <bpmn:sequenceFlow id="f9" sourceRef="g2" targetRef="t3" name=""/>
+    <bpmn:sequenceFlow id="f10" sourceRef="t3" targetRef="t4" name=""/>
+    <bpmn:sequenceFlow id="f11" sourceRef="t4" targetRef="g3" name=""/>
+    <bpmn:sequenceFlow id="f12" sourceRef="g3" targetRef="t5" name=""/>
+    <bpmn:sequenceFlow id="f13" sourceRef="g3" targetRef="end_rfq" name=""/>
+    <bpmn:sequenceFlow id="f14" sourceRef="g3" targetRef="g4" name=""/>
+    <bpmn:sequenceFlow id="f15" sourceRef="t5" targetRef="g4" name=""/>
+    <bpmn:sequenceFlow id="f16" sourceRef="g4" targetRef="t6" name=""/>
+    <bpmn:sequenceFlow id="f17" sourceRef="t6" targetRef="t7" name=""/>
+    <bpmn:sequenceFlow id="f18" sourceRef="t7" targetRef="t8" name=""/>
+    <bpmn:sequenceFlow id="f19" sourceRef="t8" targetRef="t9" name=""/>
+    <bpmn:sequenceFlow id="f20" sourceRef="t9" targetRef="t10" name=""/>
+    <bpmn:sequenceFlow id="f21" sourceRef="t10" targetRef="t11" name=""/>
+    <bpmn:sequenceFlow id="f22" sourceRef="t11" targetRef="t12" name=""/>
+    <bpmn:sequenceFlow id="f23" sourceRef="t12" targetRef="t13" name=""/>
+    <bpmn:sequenceFlow id="f24" sourceRef="t13" targetRef="t14" name=""/>
+    <bpmn:sequenceFlow id="f25" sourceRef="t14" targetRef="g5" name=""/>
+    <bpmn:sequenceFlow id="f26" sourceRef="g5" targetRef="g6" name=""/>
+    <bpmn:sequenceFlow id="f27" sourceRef="g5" targetRef="t18a" name=""/>
+    <bpmn:sequenceFlow id="f28" sourceRef="t18a" targetRef="g6" name=""/>
+    <bpmn:sequenceFlow id="f29" sourceRef="g6" targetRef="t15" name=""/>
+    <bpmn:sequenceFlow id="f30" sourceRef="t15" targetRef="t16" name=""/>
+    <bpmn:sequenceFlow id="f31" sourceRef="t16" targetRef="g7" name=""/>
+    <bpmn:sequenceFlow id="f32" sourceRef="g7" targetRef="g9" name=""/>
+    <bpmn:sequenceFlow id="f33" sourceRef="g7" targetRef="t17" name=""/>
+    <bpmn:sequenceFlow id="f34" sourceRef="t17" targetRef="g8" name=""/>
+    <bpmn:sequenceFlow id="f35" sourceRef="g8" targetRef="g9" name=""/>
+    <bpmn:sequenceFlow id="f36" sourceRef="g8" targetRef="t18b" name=""/>
+    <bpmn:sequenceFlow id="f37" sourceRef="t18b" targetRef="g9" name=""/>
+    <bpmn:sequenceFlow id="f38" sourceRef="g9" targetRef="t19" name=""/>
+    <bpmn:sequenceFlow id="f39" sourceRef="t19" targetRef="t20" name=""/>
+    <bpmn:sequenceFlow id="f40" sourceRef="t20" targetRef="end" name=""/>
+  </bpmn:process>
+</bpmn:definitions>

@@ -1,0 +1,239 @@
+/*
+Activities:
+0)  Create Purchase Requisition
+1)  Analyze Purchase Requisition
+2)  Amend Purchase Requisition
+3)  Create Request for Quotation
+4)  Analyze Request for Quotation
+5)  Amend Request for Quotation
+6)  Send Request for Quotation to Supplier
+7)  Create Quotation comparison Map
+8)  Analyze Quotation Comparison Map
+9)  Choose best option
+10) Settle Conditions With Supplier
+11) Create Purchase Order
+12) Confirm Purchase Order
+13) Deliver Goods Services
+14) Release Purchase Order
+15) Approve Purchase Order for payment
+16) Send Invoice
+17) Release Supplier's Invoice
+18) Settle Dispute With Supplier
+19) Authorize Supplier's Invoice payment
+20) Pay Invoice
+*/
+
+array[21] tacts;
+array[21] startacts;
+array[21] endacts;
+
+/* Total time */
+t = 0;
+
+/* Activity durations */
+tacts[0]  = _mu0  * _mu0  + gm([1], [0.], [10.]);
+tacts[1]  = _mu1  * _mu1  + gm([1], [0.], [10.]);
+tacts[2]  = _mu2  * _mu2  + gm([1], [0.], [10.]);
+tacts[3]  = _mu3  * _mu3  + gm([1], [0.], [10.]);
+tacts[4]  = _mu4  * _mu4  + gm([1], [0.], [10.]);
+tacts[5]  = _mu5  * _mu5  + gm([1], [0.], [10.]);
+tacts[6]  = _mu6  * _mu6  + gm([1], [0.], [10.]);
+tacts[7]  = _mu7  * _mu7  + gm([1], [0.], [10.]);
+tacts[8]  = _mu8  * _mu8  + gm([1], [0.], [10.]);
+tacts[9]  = _mu9  * _mu9  + gm([1], [0.], [10.]);
+tacts[10] = _mu10 * _mu10 + gm([1], [0.], [10.]);
+tacts[11] = _mu11 * _mu11 + gm([1], [0.], [10.]);
+tacts[12] = _mu12 * _mu12 + gm([1], [0.], [10.]);
+tacts[13] = _mu13 * _mu13 + gm([1], [0.], [10.]);
+tacts[14] = _mu14 * _mu14 + gm([1], [0.], [10.]);
+tacts[15] = _mu15 * _mu15 + gm([1], [0.], [10.]);
+tacts[16] = _mu16 * _mu16 + gm([1], [0.], [10.]);
+tacts[17] = _mu17 * _mu17 + gm([1], [0.], [10.]);
+tacts[18] = _mu18 * _mu18 + gm([1], [0.], [10.]);
+tacts[19] = _mu19 * _mu19 + gm([1], [0.], [10.]);
+tacts[20] = _mu20 * _mu20 + gm([1], [0.], [10.]);
+
+observe(tacts[0]  > 0.);
+observe(tacts[1]  > 0.);
+observe(tacts[2]  > 0.);
+observe(tacts[3]  > 0.);
+observe(tacts[4]  > 0.);
+observe(tacts[5]  > 0.);
+observe(tacts[6]  > 0.);
+observe(tacts[7]  > 0.);
+observe(tacts[8]  > 0.);
+observe(tacts[9]  > 0.);
+observe(tacts[10] > 0.);
+observe(tacts[11] > 0.);
+observe(tacts[12] > 0.);
+observe(tacts[13] > 0.);
+observe(tacts[14] > 0.);
+observe(tacts[15] > 0.);
+observe(tacts[16] > 0.);
+observe(tacts[17] > 0.);
+observe(tacts[18] > 0.);
+observe(tacts[19] > 0.);
+observe(tacts[20] > 0.);
+
+/* Gateway probabilities */
+pcreatepr        = _p0 * _p0 + gm([1], [0.], [0.1]);
+pafteranpr       = _p1 * _p1 + gm([1], [0.], [0.1]);
+pafteranrfq     = _p2 * _p2 + gm([1], [0.], [0.1]);
+pafterrfqblock    = _p3 * _p3 + gm([1], [0.], [0.1]);
+pafterreleasepo = _p4 * _p4 + gm([1], [0.], [0.1]);
+pafterrelinv    = _p5 * _p5 + gm([1], [0.], [0.1]);
+
+/* Start -> Create Purchase Requisition */
+startacts[0] = t;
+endacts[0] = startacts[0] + tacts[0];
+t = endacts[0];
+
+/* After Create Purchase Requisition:
+   - Analyze Purchase Requisition
+   - or Create Request for Quotation
+*/
+if uniform([0., 1.], 2) - pcreatepr < 0. {
+
+    /* Analyze Purchase Requisition */
+    startacts[1] = t;
+    endacts[1] = startacts[1] + tacts[1];
+    t = endacts[1];
+
+    /* After Analyze Purchase Requisition:
+       - Amend Purchase Requisition
+       - or end
+    */
+    if uniform([0., 1.], 2) - pafteranpr < 0. {
+        startacts[2] = t;
+        endacts[2] = startacts[2] + tacts[2];
+        t = endacts[2];
+    } else {
+        skip;
+    } end if;
+
+} else {
+    /* Create Request for Quotation */
+    startacts[3] = t;
+    endacts[3] = startacts[3] + tacts[3];
+    t = endacts[3];
+
+    /* Analyze Request for Quotation */
+    startacts[4] = t;
+    endacts[4] = startacts[4] + tacts[4];
+    t = endacts[4];
+
+    /* After Analyze Request for Quotation:
+    - Amend Request for Quotation
+    - or continue
+    */
+    if uniform([0., 1.], 2) - pafteranrfq < 0. {
+        startacts[5] = t;
+        endacts[5] = startacts[5] + tacts[5];
+        t = endacts[5];
+    } else {
+        skip;
+    } end if;
+
+    /* After RFQ block:
+    - Send Request for Quotation to Supplier
+    - or end
+    */
+    if uniform([0., 1.], 2) - pafterrfqblock < 0. {
+
+        /* Send Request for Quotation to Supplier */
+        startacts[6] = t;
+        endacts[6] = startacts[6] + tacts[6];
+        t = endacts[6];
+
+        /* Create Quotation comparison Map */
+        startacts[7] = t;
+        endacts[7] = startacts[7] + tacts[7];
+        t = endacts[7];
+
+        /* Analyze Quotation Comparison Map */
+        startacts[8] = t;
+        endacts[8] = startacts[8] + tacts[8];
+        t = endacts[8];
+
+        /* Choose best option */
+        startacts[9] = t;
+        endacts[9] = startacts[9] + tacts[9];
+        t = endacts[9];
+
+        /* Settle Conditions With Supplier */
+        startacts[10] = t;
+        endacts[10] = startacts[10] + tacts[10];
+        t = endacts[10];
+
+        /* Create Purchase Order */
+        startacts[11] = t;
+        endacts[11] = startacts[11] + tacts[11];
+        t = endacts[11];
+
+        /* Confirm Purchase Order */
+        startacts[12] = t;
+        endacts[12] = startacts[12] + tacts[12];
+        t = endacts[12];
+
+        /* Deliver Goods Services */
+        startacts[13] = t;
+        endacts[13] = startacts[13] + tacts[13];
+        t = endacts[13];
+
+        /* Release Purchase Order */
+        startacts[14] = t;
+        endacts[14] = startacts[14] + tacts[14];
+        t = endacts[14];
+
+        /* After Release Purchase Order:
+        - Approve Purchase Order for payment
+        - or dispute
+        */
+        if uniform([0., 1.], 2) - pafterreleasepo < 0. {
+
+            /* Approve Purchase Order for payment */
+            startacts[15] = t;
+            endacts[15] = startacts[15] + tacts[15];
+            t = endacts[15];
+
+            /* Send Invoice */
+            startacts[16] = t;
+            endacts[16] = startacts[16] + tacts[16];
+            t = endacts[16];
+
+            /* Release Supplier's Invoice */
+            startacts[17] = t;
+            endacts[17] = startacts[17] + tacts[17];
+            t = endacts[17];
+        } else {
+            skip;
+        } end if;
+
+        /* After Release Supplier's Invoice:
+        - dispute
+        - or skip
+        */
+        if uniform([0., 1.], 2) - pafterrelinv < 0. {
+
+            /* Settle Dispute With Supplier */
+            startacts[18] = t;
+            endacts[18] = startacts[18] + tacts[18];
+            t = endacts[18];
+
+        } else {
+            skip;
+        } end if;
+
+        /* Authorize Supplier's Invoice payment */
+        startacts[19] = t;
+        endacts[19] = startacts[19] + tacts[19];
+        t = endacts[19];
+
+        /* Pay Invoice */
+        startacts[20] = t;
+        endacts[20] = startacts[20] + tacts[20];
+        t = endacts[20];
+    } else {
+        skip;
+    } end if;
+} end if;
