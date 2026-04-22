@@ -1,3 +1,5 @@
+import math
+
 import matplotlib.pyplot as plt
 import torch
 from torch import distributions
@@ -46,11 +48,11 @@ def double_well_model(time=50, init_x=-1.0, h = 0.15, a=1.0, b=1.0, sigma=0.65):
     time = int(time)
     traj = torch.zeros(time)
     traj[0] = init_x
-    noise = distributions.Normal(torch.tensor(0.), torch.tensor(sigma*sigma*h))
+    noise =  distributions.Normal(torch.tensor(0.), torch.tensor(1.))
 
     for i in range(1, time):
         # update x
-        traj[i] = traj[i - 1] + h * (a * traj[i - 1] - b * traj[i - 1] * traj[i - 1] * traj[i - 1])  +  noise.rsample()
+        traj[i] = traj[i - 1] + h * h * (a * traj[i - 1] - b * traj[i - 1] * traj[i - 1] * traj[i - 1])  +  sigma * h * noise.rsample()
 
     return traj
 
