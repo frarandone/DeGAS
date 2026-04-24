@@ -76,12 +76,12 @@ observe(tacts[19] > 0.);
 observe(tacts[20] > 0.);
 
 /* Gateway probabilities */
-pcreatepr        = _p0 * _p0 + gm([1], [0.], [0.1]);
-pafteranpr       = _p1 * _p1 + gm([1], [0.], [0.1]);
-pafteranrfq     = _p2 * _p2 + gm([1], [0.], [0.1]);
-pafterrfqblock    = _p3 * _p3 + gm([1], [0.], [0.1]);
-pafterreleasepo = _p4 * _p4 + gm([1], [0.], [0.1]);
-pafterrelinv    = _p5 * _p5 + gm([1], [0.], [0.1]);
+pcreatepr        = _p0 * _p0 ;
+pafteranpr       = _p1 * _p1 ;
+pafteranrfq     = _p2 * _p2 ;
+pafterrfqblock    = _p3 * _p3;
+pafterreleasepo = _p4 * _p4 ;
+pafterrelinv    = _p5 * _p5 ;
 
 /* Start -> Create Purchase Requisition */
 startacts[0] = t;

@@ -88,22 +88,22 @@ observe(tacts[23] > 0.);
 observe(tacts[24] > 0.);
 
 /* Gateway probabilities */
-p0  = _p0  * _p0  + gm([1], [0.], [0.1]);   /* after A_PARTLYSUBMITTED: go to fraud/fix/preaccepted block */
-p1  = _p1  * _p1  + gm([1], [0.], [0.1]);   /* do W_Assess_fraud */
-p2  = _p2  * _p2  + gm([1], [0.], [0.1]);   /* do W_Fix_incomplete_submission */
-p3  = _p3  * _p3  + gm([1], [0.], [0.1]);   /* do A_PREACCEPTED block */
-p4  = _p4  * _p4  + gm([1], [0.], [0.1]);   /* do A_ACCEPTED */
-p5  = _p5  * _p5  + gm([1], [0.], [0.1]);   /* enter outer parallel block */
-p6  = _p6  * _p6  + gm([1], [0.], [0.1]);   /* do O_CANCELLED on outer right branch */
-p7  = _p7  * _p7  + gm([1], [0.], [0.1]);   /* enter inner parallel block with A_FINALIZED and O_SELECTED path */
-p8  = _p8  * _p8  + gm([1], [0.], [0.1]);   /* do A_CANCELLED */
-p9  = _p9  * _p9  + gm([1], [0.], [0.1]);   /* do W_Call_after_offer */
-p10 = _p10 * _p10 + gm([1], [0.], [0.1]);   /* do O_SENT_BACK */
-p11 = _p11 * _p11 + gm([1], [0.], [0.1]);   /* enter inner parallel block with W_Call_missing_information */
-p12 = _p12 * _p12 + gm([1], [0.], [0.1]);   /* do W_Assess_application */
-p13 = _p13 * _p13 + gm([1], [0.], [0.1]);   /* final choice: direct to END */
-p14 = _p14 * _p14 + gm([1], [0.], [0.1]);   /* final choice: A_DECLINED branch vs O_ACCEPTED branch */
-p15 = _p15 * _p15 + gm([1], [0.], [0.1]);   /* after A_DECLINED: do O_DECLINED */
+p0  = _p0  * _p0 ;   /* after A_PARTLYSUBMITTED: go to fraud/fix/preaccepted block */
+p1  = _p1  * _p1 ;   /* do W_Assess_fraud */
+p2  = _p2  * _p2 ;   /* do W_Fix_incomplete_submission */
+p3  = _p3  * _p3 ;   /* do A_PREACCEPTED block */
+p4  = _p4  * _p4 ;   /* do A_ACCEPTED */
+p5  = _p5  * _p5 ;   /* enter outer parallel block */
+p6  = _p6  * _p6;   /* do O_CANCELLED on outer right branch */
+p7  = _p7  * _p7;   /* enter inner parallel block with A_FINALIZED and O_SELECTED path */
+p8  = _p8  * _p8 ;   /* do A_CANCELLED */
+p9  = _p9  * _p9 ;   /* do W_Call_after_offer */
+p10 = _p10 * _p10 ;   /* do O_SENT_BACK */
+p11 = _p11 * _p11 ;   /* enter inner parallel block with W_Call_missing_information */
+p12 = _p12 * _p12 ;   /* do W_Assess_application */
+p13 = _p13 * _p13 ;   /* final choice: direct to END */
+p14 = _p14 * _p14 ;   /* final choice: A_DECLINED branch vs O_ACCEPTED branch */
+p15 = _p15 * _p15 ;   /* after A_DECLINED: do O_DECLINED */
 
 /* START */
 startacts[0] = t;
