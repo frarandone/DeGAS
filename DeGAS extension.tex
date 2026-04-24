@@ -1,0 +1,147 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{color}
+\usepackage{enumerate}
+\usepackage{appendix}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{stmaryrd}
+
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lem}[theorem]{Lemma}
+\newtheorem{cor}[theorem]{Corollary}
+\newtheorem{rmk}{Remark}
+\newtheorem{exe}{Example}
+\newtheorem{prop}{Proposition}
+\newtheorem{definition}{Definition}
+
+\newcommand{\expc}[1]{\mathbb{E}\left[ #1 \right]}
+
+
+\title{Notes on how to extend DeGAS}
+\author{}
+\date{}
+
+\begin{document}
+
+\section{Extension to extended Polynomials}
+
+\subsection{Syntax Extension}
+
+Let $x_1, \hdots, x_m$ be program variables.
+We want to extend DeGAS' syntax to support assignments in the form:
+
+$$ \mathtt{ x = \sum_{k=0}^K c_k m^{poly}_k \, \Bigg| \, \sum_{k=0}^K c_k m^{trig}_k \, \Bigg| \, \sum_{k=0}^K c_k m^{exp}_k}.$$
+
+The previous include three different cases:
+\begin{itemize}
+    
+    \item[i)] \textit{Polynomial assignments.} In this case $\mathtt{m^{poly}_k}$ are \textit{monomials}, defined as 
+    $$ m^{poly} = x_1^{\alpha_1}...x_m^{\alpha_m}$$
+    for $\alpha_i \in \mathbb{N}$.
+
+    \item[ii)] \textit{Trigonometric polynomials.} In this case, $\mathtt{m^{trig}_k}$ are \textit{trigonometric monomials}, defined as:
+    $$ m^{trig} = x_1^{\alpha_1}...x_{m}^{\alpha_m} \cos^{\beta_1}(x_1)...\cos^{\beta_m}(x_m)\sin^{\gamma_1}(x_1)...\sin^{\gamma_m}(x_m)$$
+    for $\alpha_i, \beta_i, \gamma_i \in \mathbb{N}$.
+
+    \item[iii)] \textit{Exponential polynomials.} In this case, $\mathtt{m^{exp}_k}$ are \textit{exponential monomials}, defined as:
+    $$ m^{exp} = x_1^{\alpha_1}...x_m^{\alpha_m}\exp^{\beta_1}(x_1)...\exp^{\beta_m}(x_m)$$
+    for $\alpha_i, \beta_i \in \mathbb{N}$.
+   
+\end{itemize}
+
+Now we explain how DeGAS computes the semantics of these assignments.
+
+\subsection{Semantics Extension}
+
+\subsubsection{Reduction to monomials}
+
+We show that to compute the means and the covariance matrix of $X_i$ after the assignment $\mathtt{x_i = \sum_{k=0}^K c_k m_k^*}$, where $* \in \{poly, trig, exp\}$ (but is always the same for all terms in the summation), it is sufficient to know how to compute the expectation of the single monomials.
+
+For the mean we have
+$$ \expc{X_i} = \expc{\sum_{k=0}^K c_k m_k^*} = \sum_{k=0}^K c_k \expc{m_k^*}  $$
+
+For the covariance matrix e need to compute
+\begin{align*} 
+&Cov(X_i, X_j) = \expc{X_iX_j} - \expc{X_i}\expc{X_j} = \sum_{k=0}^K c_k \expc{x_jm_k^*} - \expc{X_i}\expc{X_j} \\
+&Var(x_i) = \expc{X_i^2} - \expc{X_i}^2 = \sum_{k=0}^K c_k^2 \expc{(m_k^*)^2} + 2 \sum_{0 \le k_1 < k_2 \le K} c_{k_1} c_{k_2} \expc{m_{k_1}^*m_{k_2}^*}  - \expc{X_i}^2
+\end{align*}
+where $x_j m_k^*, (m_k^*)^2$ and $m_{k_1}^*m_{k_2}^*$ are all monomials of the same type as $m_k^*$.
+
+\subsubsection{Expectation of monomials}
+
+\paragraph{Monomials}
+
+For computing $\expc{m_k^{poly}}$ we use the following.
+
+\begin{theorem}[Isserlis' Theorem]
+For a vector $X = (X_1, \hdots, X_n)$ which is jointly Gaussian, it holds:
+$$ \expc{(X_1 - \mu_1)\hdots(X_n - \mu_n)} = \sum_{\substack{p = \text{partition of} \\ \{1, \hdots, m\} \text{into pairs} \\ \{(i_1, i_2), \hdots, (i_{n-1}, i_n)}\}} \prod_{(i_j, i_k) \in p} Cov(X_{i_j}, X_{i_k}) $$ 
+\end{theorem}
+
+From Isserlis' theorem one obtains a formulas for $\expc{X_1\hdots X_n}$ as a function of expectations of lower order monomials. In fact, at the l.h.s. one can compute the product and obtain a monic polynomial with highest order term $X_1\hdots X_n$. Then, applying the linearity of the expectation one directly obtains that $\expc{X_1\hdots X_n}$ can be expressed as a linear combination of the expectations of lower order monomials and the r.h.s. of the previous equation.
+
+In general, for computing $\expc{X_1^{\alpha_1}\hdots X_m^{\alpha_k}}$ one has to set $Y_{1,i}=\hdots=Y_{1,\alpha_i}=X_i$ for $i=1, \hdots, m$. Then the vector $Y = (Y_{1,1}, \hdots, Y_{m,\alpha_m})$ is still jointly Gaussian and Isserlis' theorem can be applied to it.
+
+\paragraph{Trigonometric Monomials}
+
+For computing $\expc{m_k^{trig}}$ we use the following.
+
+\begin{lem}
+For a random vector $X = (X_1, \hdots, X_m)$ with characteristic function $\Phi_X(t)$:
+\begin{align*}
+    &\expc{X_1^{\alpha_1}\hdots X_m^{\alpha_m} \cos^{\beta_1}(X_1)\hdots\cos^{\beta_m}(X_m)\sin^{\gamma_1}(X_1)\hdots\sin^{\gamma_m}(X_m)} = \\
+    &\frac{ \sum_{\substack{(b_1, \hdots, b_m)\\ = \\ (0, \hdots 0)}}^{\beta_1, \hdots, \beta_m} \sum_{\substack{(c_1, \hdots, c_m)\\ = \\  (0, \hdots, 0)}}^{\gamma_1, \hdots, \gamma_m} \prod_{i=1}^m \binom{\beta_i}{b_i} \binom{\gamma_i}{c_i} \frac{d^{\alpha_1}}{dt_1^{\alpha_1}} \hdots \frac{d^{\alpha_m}}{dt_m^{\alpha_m}} \Phi_X(t_1, \hdots, t_m)\Bigg|_{(t_i = 2(b_i + c_i) - \beta_i - \gamma_i)} }{2^{\sum_{i=1}^m (\beta_i + \gamma_i)}i^{\sum_{i=1}^m (\alpha_i + \gamma_i)}}
+\end{align*}
+\end{lem}
+
+For a multivariate Gaussian $X = (X_1, \hdots, X_m)$ the characteristic function is (let $t = (t_1, \hdots, t_m)$ be a column vector):
+$$\Phi_X(t) = \exp\left(i \mu^T \cdot t - \frac{1}{2} t^T \Sigma t\right)$$
+
+\paragraph{Exponential Monomials}
+
+For computing $\expc{m_k^{exp}}$ we use the following.
+
+\begin{lem}
+For a random vector $X = (X_1, \hdots, X_m)$ with moment-generating function $\mathcal{M}_X(t)$:
+\begin{align*}
+\expc{X_1^{\alpha_1}\hdots X_m^{\alpha_m}\exp^{\beta_1}(X_1)\hdots\exp^{\beta_m}(X_m)} = \frac{d^{\alpha_1}}{dt_1^{\alpha_1}} \hdots \frac{d^{\alpha_m}}{t_m^{\alpha_m}} \mathcal{M}_X(t_1, \hdots, t_m) \Bigg|_{(t_i = \beta_i)}
+\end{align*}
+\end{lem}
+
+For a multivariate Gaussian $X = (X_1, \hdots, X_m)$ the moment-generating function is (let $t = (t_1, \hdots, t_m)$ be a column vector):
+$$\mathcal{M}_X(t) = \exp\left(\mu^T \cdot t + \frac{1}{2} t^T \Sigma t\right)$$
+
+\subsubsection{Generalization to Gaussian Mixtures}
+
+In general DeGAS computes for Gaussian Mixtures, so the above results should be applied to every components of the mixture.
+
+\subsection{Practical steps to implement this}
+
+\begin{itemize}
+    \item Modify the grammars in the files SOGA.g4 and ASGMT.g4 so that now assignment allows for polynomials, trigonometric polynomials and exponential polynomials
+    \item Generate new files using antlr4
+    \item Move the newly generated files to the src folder, and modify them with the additions specified in Snippet.txt 
+    \item Modify the functions defined in libSOGAupdate.py so that now when a polynomial, a trigonometric polynomial or an exponential polynomial appears in an assignment the above formulas are used to compute the means and the covariance matrices of the transformed distributions.
+\end{itemize}
+
+Other practical notes:
+\begin{itemize}
+\item Use \texttt{x\textasciicircum n} for powers of x, \texttt{cos(x), sin(x), exp(x)} for sine, cosine and exponential of x respectively, and use \texttt{cos(x)\textasciicircum n, sin(x)\textasciicircum n} and \texttt{exp(x)\textasciicircum n} for powers of trig/exp.
+\item Keep the current implementation for the linear case (probably more efficient). 
+\item Note that in general when writing a monomial in a program the terms with exponent 0 will be omitted (so in a monomial not all variables will be explicitly written with their exponent). For terms with exponent 1 we do not write the exponent, but only the associated variable.
+\item The trig and exp cases require computing derivative. Implement them analytically using Pytorch.
+\item In general, \texttt{gm(...)} could appear inside a new monomial. 
+\item We do NOT allow for mixed terms
+\end{itemize}
+\end{document}

@@ -54,8 +54,63 @@ class SOGAVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SOGAParser#mul.
-    def visitMul(self, ctx:SOGAParser.MulContext):
+    # Visit a parse tree produced by SOGAParser#poly_asgmt.
+    def visitPoly_asgmt(self, ctx:SOGAParser.Poly_asgmtContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#poly_aterm.
+    def visitPoly_aterm(self, ctx:SOGAParser.Poly_atermContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#poly_mono.
+    def visitPoly_mono(self, ctx:SOGAParser.Poly_monoContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#poly_pfactor.
+    def visitPoly_pfactor(self, ctx:SOGAParser.Poly_pfactorContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#trig_asgmt.
+    def visitTrig_asgmt(self, ctx:SOGAParser.Trig_asgmtContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#trig_aterm.
+    def visitTrig_aterm(self, ctx:SOGAParser.Trig_atermContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#trig_mono.
+    def visitTrig_mono(self, ctx:SOGAParser.Trig_monoContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#trig_sfactor.
+    def visitTrig_sfactor(self, ctx:SOGAParser.Trig_sfactorContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#exp_asgmt.
+    def visitExp_asgmt(self, ctx:SOGAParser.Exp_asgmtContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#exp_aterm.
+    def visitExp_aterm(self, ctx:SOGAParser.Exp_atermContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#exp_mono.
+    def visitExp_mono(self, ctx:SOGAParser.Exp_monoContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SOGAParser#exp_sfactor.
+    def visitExp_sfactor(self, ctx:SOGAParser.Exp_sfactorContext):
         return self.visitChildren(ctx)
 
 

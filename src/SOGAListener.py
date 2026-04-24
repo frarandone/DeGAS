@@ -89,12 +89,111 @@ class SOGAListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SOGAParser#mul.
-    def enterMul(self, ctx:SOGAParser.MulContext):
+    # Enter a parse tree produced by SOGAParser#poly_asgmt.
+    def enterPoly_asgmt(self, ctx:SOGAParser.Poly_asgmtContext):
         pass
 
-    # Exit a parse tree produced by SOGAParser#mul.
-    def exitMul(self, ctx:SOGAParser.MulContext):
+    # Exit a parse tree produced by SOGAParser#poly_asgmt.
+    def exitPoly_asgmt(self, ctx:SOGAParser.Poly_asgmtContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#poly_aterm.
+    def enterPoly_aterm(self, ctx:SOGAParser.Poly_atermContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#poly_aterm.
+    def exitPoly_aterm(self, ctx:SOGAParser.Poly_atermContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#poly_mono.
+    def enterPoly_mono(self, ctx:SOGAParser.Poly_monoContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#poly_mono.
+    def exitPoly_mono(self, ctx:SOGAParser.Poly_monoContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#poly_pfactor.
+    def enterPoly_pfactor(self, ctx:SOGAParser.Poly_pfactorContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#poly_pfactor.
+    def exitPoly_pfactor(self, ctx:SOGAParser.Poly_pfactorContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#trig_asgmt.
+    def enterTrig_asgmt(self, ctx:SOGAParser.Trig_asgmtContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#trig_asgmt.
+    def exitTrig_asgmt(self, ctx:SOGAParser.Trig_asgmtContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#trig_aterm.
+    def enterTrig_aterm(self, ctx:SOGAParser.Trig_atermContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#trig_aterm.
+    def exitTrig_aterm(self, ctx:SOGAParser.Trig_atermContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#trig_mono.
+    def enterTrig_mono(self, ctx:SOGAParser.Trig_monoContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#trig_mono.
+    def exitTrig_mono(self, ctx:SOGAParser.Trig_monoContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#trig_sfactor.
+    def enterTrig_sfactor(self, ctx:SOGAParser.Trig_sfactorContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#trig_sfactor.
+    def exitTrig_sfactor(self, ctx:SOGAParser.Trig_sfactorContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#exp_asgmt.
+    def enterExp_asgmt(self, ctx:SOGAParser.Exp_asgmtContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#exp_asgmt.
+    def exitExp_asgmt(self, ctx:SOGAParser.Exp_asgmtContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#exp_aterm.
+    def enterExp_aterm(self, ctx:SOGAParser.Exp_atermContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#exp_aterm.
+    def exitExp_aterm(self, ctx:SOGAParser.Exp_atermContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#exp_mono.
+    def enterExp_mono(self, ctx:SOGAParser.Exp_monoContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#exp_mono.
+    def exitExp_mono(self, ctx:SOGAParser.Exp_monoContext):
+        pass
+
+
+    # Enter a parse tree produced by SOGAParser#exp_sfactor.
+    def enterExp_sfactor(self, ctx:SOGAParser.Exp_sfactorContext):
+        pass
+
+    # Exit a parse tree produced by SOGAParser#exp_sfactor.
+    def exitExp_sfactor(self, ctx:SOGAParser.Exp_sfactorContext):
         pass
 
 

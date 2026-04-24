@@ -29,6 +29,66 @@ class ASGMTVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by ASGMTParser#poly_sum.
+    def visitPoly_sum(self, ctx:ASGMTParser.Poly_sumContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#poly_term.
+    def visitPoly_term(self, ctx:ASGMTParser.Poly_termContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#poly_mono.
+    def visitPoly_mono(self, ctx:ASGMTParser.Poly_monoContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#poly_factor.
+    def visitPoly_factor(self, ctx:ASGMTParser.Poly_factorContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#trig_sum.
+    def visitTrig_sum(self, ctx:ASGMTParser.Trig_sumContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#trig_term.
+    def visitTrig_term(self, ctx:ASGMTParser.Trig_termContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#trig_mono.
+    def visitTrig_mono(self, ctx:ASGMTParser.Trig_monoContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#trig_factor.
+    def visitTrig_factor(self, ctx:ASGMTParser.Trig_factorContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#exp_sum.
+    def visitExp_sum(self, ctx:ASGMTParser.Exp_sumContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#exp_term.
+    def visitExp_term(self, ctx:ASGMTParser.Exp_termContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#exp_mono.
+    def visitExp_mono(self, ctx:ASGMTParser.Exp_monoContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by ASGMTParser#exp_factor.
+    def visitExp_factor(self, ctx:ASGMTParser.Exp_factorContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by ASGMTParser#symvars.
     def visitSymvars(self, ctx:ASGMTParser.SymvarsContext):
         return self.visitChildren(ctx)
