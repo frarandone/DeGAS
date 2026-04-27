@@ -127,6 +127,13 @@ class GaussianMix():
             return mvncdf(x, self.mu[k], self.sigma[k])
         else:
             return distributions.Normal(self.mu[k], torch.sqrt(self.sigma[k])).cdf(x)
+
+    def comp_ccdf(self, x, k):
+        # Complementary CDF
+        if self.n_dim() > 1:
+            return mvnccdf(x, self.mu[k], self.sigma[k])
+        else:
+            return 1.0 - distributions.Normal(self.mu[k], torch.sqrt(self.sigma[k])).cdf(x)
             
     def marg_comp_cdf(self, x, k, idx):
         if isinstance(idx, list):
@@ -134,18 +141,36 @@ class GaussianMix():
             return mvncdf(x, self.mu[k][idx], cov_submatrix)
         else:
             return distributions.Normal(self.mu[k][idx], torch.sqrt(self.sigma[k][idx,idx])).cdf(x)
+
+    def marg_comp_ccdf(self, x, k, idx):
+        if isinstance(idx, list):
+            cov_submatrix = torch.clone(self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)])
+            return mvnccdf(x, self.mu[k][idx], cov_submatrix)
+        else:
+            return 1.0 - distributions.Normal(self.mu[k][idx], torch.sqrt(self.sigma[k][idx,idx])).cdf(x)
         
     
     def cdf(self, x):
         comp_cdfs = torch.stack([self.comp_cdf(x, k) for k in range(self.n_comp())], dim=1)
         cdf = torch.matmul(comp_cdfs, self.pi.view(-1, 1))
         return cdf
+
+    def ccdf(self, x):
+        comp_ccdfs = torch.stack([self.comp_ccdf(x, k) for k in range(self.n_comp())], dim=1)
+        ccdf = torch.matmul(comp_ccdfs, self.pi.view(-1, 1))
+        return ccdf
     
     def marg_cdf(self, x, idx):
         x = torch.as_tensor(x, dtype=self.mu.dtype, device=self.mu.device)
         comp_cdfs = torch.stack([self.marg_comp_cdf(x, k, idx) for k in range(self.n_comp())], dim=-1)
         cdf = torch.matmul(comp_cdfs, self.pi)
         return cdf
+
+    def marg_ccdf(self, x, idx):
+        x = torch.as_tensor(x, dtype=self.mu.dtype, device=self.mu.device)
+        comp_ccdfs = torch.stack([self.marg_comp_ccdf(x, k, idx) for k in range(self.n_comp())], dim=-1)
+        ccdf = torch.matmul(comp_ccdfs, self.pi)
+        return ccdf
       
     
     # Moments of mixtures
@@ -285,6 +310,34 @@ def mvncdf(x, mean, cov):
     dim = x.shape[1]
     # Compute bounds for each x in the batch
     bounds = torch.stack([torch.tensor([[-torch.inf, x[i, j] - mean[j]] for j in range(dim)]) for i in range(batch_size)])
+    # Initialize result tensor
+    res = torch.zeros(batch_size)
+    for i in range(batch_size):
+        result = torch.exp(mvn.MVNXPB(covariance_matrix=cov, bounds=bounds[i]).solve())
+        if result.isnan():
+            cov = make_sym(cov)
+            result = torch.exp(mvn.MVNXPB(covariance_matrix=cov, bounds=bounds[i]).solve())
+        res[i] = result
+    return res
+
+
+def mvnccdf(x, mean, cov):
+    """
+    Upper-tail multivariate Gaussian probability.
+
+    Returns P(X >= x) for X ~ N(mean, cov), where x can be a single sample
+    (shape [d]) or a batch of samples (shape [n, d]).
+    """
+    # Ensure x has a batch dimension
+    if x.dim() == 1:
+        x = x.unsqueeze(0)
+    batch_size = x.shape[0]
+    dim = x.shape[1]
+    # Compute bounds for each x in the batch
+    bounds = torch.stack([
+        torch.tensor([[x[i, j] - mean[j], torch.inf] for j in range(dim)])
+        for i in range(batch_size)
+    ])
     # Initialize result tensor
     res = torch.zeros(batch_size)
     for i in range(batch_size):

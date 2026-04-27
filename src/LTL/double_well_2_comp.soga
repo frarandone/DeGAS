@@ -1,0 +1,21 @@
+array[50] X;
+
+currX = gm([0.5, 0.5], [_xinit1, _xinit2], [0.01, 0.01]);
+
+for i in range(50) {
+
+    X[i] = currX;
+    xCube = currX * currX;
+    xCube = xCube * currX;
+
+    term = _a * currX - _b * xCube;
+    hsq = _h * _h;
+    term = hsq * term;
+    noise = _h * _sigma;
+    noise = noise * gauss(0., 1.);
+    newX = currX + term + noise;
+
+    currX = newX;
+
+
+} end for;

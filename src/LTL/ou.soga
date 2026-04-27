@@ -1,7 +1,7 @@
 
 X = -2.0;
-/* phi = 0; */
 phi = 1;
+count = 0;
 
 /* initial value should be calculated explicitly. */
 
@@ -9,20 +9,22 @@ for i in range(30) {
 
      X = 0.8*X + 0.4 + gauss(0., 0.0484);
 
-     /*
-     if X > 2.1 {
-          phi = 1;
-     } else {
-          skip;
-     } end if;
-     */
-
      
-     if X < 2.1 {
-          skip;
+     if count > 25 {
+          if X < 2.05 {
+               if X > 1.95 {
+                    skip;
+               } else {
+                    phi = 0;
+               } end if; 
+          } else {
+               phi = 0;
+          } end if;
      } else {
-          phi = 0;
+          skip;
      } end if;
+
+     count = count + 1;
      
 
 } end for;

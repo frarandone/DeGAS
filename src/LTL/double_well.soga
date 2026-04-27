@@ -1,21 +1,42 @@
-array[50] X;
+array[35] X;
+currX = gm([1.], [_xinit1], [0.01]);
 
-currX = gm([0.5, 0.5], [_xinit1, _xinit2], [0.01, 0.01]);
+/* Monitor variables for phi3 = O(x > delta) OR O(x < -delta) */
+/* phipos = O(x > delta), phineg = O(x < -delta)               */
+phipos = 0;
+phineg = 0;
+phi = 0;
 
-for i in range(50) {
-
+for i in range(35) {
     X[i] = currX;
     xCube = currX * currX;
     xCube = xCube * currX;
-
     term = _a * currX - _b * xCube;
     hsq = _h * _h;
     term = hsq * term;
     noise = _h * _sigma;
     noise = noise * gauss(0., 1.);
     newX = currX + term + noise;
-
     currX = newX;
 
+    /* Monitor for O(x > delta): becomes 1 if x ever exceeds delta */
+
+    if currX > _delta {
+        phipos = 1;
+    } else {
+        skip;
+    } end if;
+
+    /* Monitor for O(x < -delta): becomes 1 if x ever goes below -delta */
+
+    if currX < _ndelta {
+        phineg = 1;
+    } else {
+        skip;
+    } end if;
 
 } end for;
+
+/* phi = phipos OR phineg */
+phi = phipos * phineg;
+phi = phipos + phineg - phi;
