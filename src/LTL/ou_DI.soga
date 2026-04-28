@@ -1,0 +1,11 @@
+array[30] Xvec;
+X = -2.0;
+phi = 1;
+
+/* initial value should be calculated explicitly. */
+
+for i in range(30) {
+     Xvec[i] = X;
+     X = 0.8*X + 0.4 + gauss(0., 0.0484);
+} end for;
+

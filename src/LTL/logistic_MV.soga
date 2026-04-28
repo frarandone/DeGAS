@@ -1,0 +1,32 @@
+currX = 0.8;
+
+phi = 1;
+counter = 0;
+
+for i in range(30) {
+
+    xSquare = currX * currX;
+    noise = gauss(0., 0.0324);
+    xNoise = currX * noise;
+    newX = 1.32 * currX - 0.032 * xSquare + xNoise;
+
+    currX = newX;
+
+    
+    if counter < 20 {
+        if currX > 10 {
+            phi = 0;
+        } else {
+            skip;
+        } end if;
+    } else {
+        if currX < 10 {
+            phi = 0;
+        } else {
+            skip;
+        } end if;
+    } end if;
+    
+
+    counter = counter + 1;
+} end for;

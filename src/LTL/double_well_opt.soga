@@ -1,13 +1,13 @@
-phi = 0;
+array[30] X;
+phineg = 0;
 currX = gm([1.], [_xinit1], [0.01]);
 
 /* Monitor variables for phi3 = O(x > delta) OR O(x < -delta) */
 /* phipos = O(x > delta), phineg = O(x < -delta)               */
-phipos = 0;
-phineg = 0;
 
 
 for i in range(30) {
+    X[i] = currX;
     xCube = currX * currX;
     xCube = xCube * currX;
     term = _a * currX - _b * xCube;
@@ -18,16 +18,6 @@ for i in range(30) {
     newX = currX + term + noise;
     currX = newX;
 
-    /* Monitor for O(x > delta): becomes 1 if x ever exceeds delta */
-    if phipos == 1 {
-        skip;
-    } else {
-        if currX > _delta {
-            phipos = 1;
-        } else {
-            skip;
-        } end if;
-    } end if;
 
     /* Monitor for O(x < -delta): becomes 1 if x ever goes below -delta */
     if phineg == 1 {
@@ -40,8 +30,5 @@ for i in range(30) {
         } end if;
     } end if;
 
-    /* phi = phipos OR phineg */
-    phi = phipos * phineg;
-    phi = phipos + phineg - phi;
 
 } end for;
