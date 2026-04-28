@@ -27,6 +27,7 @@ ignore = [
 
 [lint.isort]
 lines-after-imports = 2
+known-first-party = ["pydegas"]
 
 [format]
 quote-style = "double"
