@@ -1121,6 +1121,34 @@ class ASGMTParser(Parser):
             else:
                 return visitor.visitChildren(self)
 
+        def is_var(self, data):
+            """Returns True if term is a variable, False if it is a constant."""
+            if self.NUM() is not None:
+                return False
+            if self.par() is not None:
+                return False
+            if self.symvars() is not None:
+                if self.symvars().IDV() is not None:
+                    return True
+                if self.symvars().idd() is not None:
+                    return not self.symvars().idd().is_data(data)
+            if self.gm() is not None:
+                return True
+            return False
+
+        def is_const(self, data):
+            return not self.is_var(data)
+
+        def getValue(self, data, params_dict):
+            if self.is_const(data):
+                if self.NUM() is not None:
+                    return float(self.NUM().getText())
+                if self.symvars() is not None:
+                    return self.symvars().idd().getValue(data)
+                if self.par() is not None:
+                    return self.par().getValue(params_dict)
+            raise ValueError("Calling getValue for a variable")
+
     def term(self):
 
         localctx = ASGMTParser.TermContext(self, self._ctx, self.state)
@@ -1213,6 +1241,14 @@ class ASGMTParser(Parser):
             else:
                 return visitor.visitChildren(self)
 
+        def getVar(self, data):
+            if self.idd() is None:
+                return self.getText()
+            if self.idd().IDV(1) is None:
+                return self.getText()
+            data_idx = int(data[self.idd().IDV(1).getText()][0].item())
+            return self.idd().IDV(0).getText() + "[" + str(data_idx) + "]"
+
     def symvars(self):
 
         localctx = ASGMTParser.SymvarsContext(self, self._ctx, self.state)
@@ -1273,6 +1309,17 @@ class ASGMTParser(Parser):
                 return visitor.visitIdd(self)
             else:
                 return visitor.visitChildren(self)
+
+        def is_data(self, data):
+            return self.IDV(0).getText() in data.keys()
+
+        def getValue(self, data):
+            data_name = self.IDV(0).getText()
+            if self.NUM() is not None:
+                data_idx = int(self.NUM().getText())
+            else:
+                data_idx = int(data[self.IDV(1).getText()][0].item())
+            return data[data_name][data_idx]
 
     def idd(self):
 
@@ -1395,6 +1442,18 @@ class ASGMTParser(Parser):
                 return visitor.visitList(self)
             else:
                 return visitor.visitChildren(self)
+
+        def unpack(self, params_dict):
+            import torch
+
+            str_list = self.getText()[1:-1].split(",")
+            unpacked = torch.zeros(len(str_list))
+            for i, elem in enumerate(str_list):
+                if elem[0] == "_":
+                    unpacked[i] = params_dict[elem[1:]]
+                else:
+                    unpacked[i] = float(elem)
+            return unpacked
 
     def list_(self):
 
@@ -1519,6 +1578,10 @@ class ASGMTParser(Parser):
                 return visitor.visitPar(self)
             else:
                 return visitor.visitChildren(self)
+
+        def getValue(self, params_dict):
+            name = self.getText()[1:]  # strip leading '_'
+            return params_dict[name]
 
     def par(self):
 
