@@ -226,7 +226,9 @@ def parse_assignment(
     tree = parser.assignment()
     rule = AsgmtRule(variables, data, parameters)
     ParseTreeWalker().walk(rule, tree)
-    assert rule.update_func is not None, f"AsgmtRule produced no update function for expression={expression!r}"
+    if rule.update_func is None:
+        logger.error("AsgmtRule produced no update function for expression=%r", expression)
+        raise ValueError(f"AsgmtRule produced no update function for expression={expression!r}")
     return rule.update_func
 
 
