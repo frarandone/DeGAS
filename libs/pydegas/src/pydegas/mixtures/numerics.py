@@ -1,4 +1,4 @@
-"""Multivariate normal CDF and covariance symmetry helpers."""
+"""Multivariate normal CDF, covariance symmetry helpers, and truncated-normal moments."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import logging
 
 import botorch.utils.probability.mvnxpb as mvn
 import torch
+import torch.distributions as distributions
 
 from pydegas.mixtures.constants import TOL_ERR
 
@@ -22,6 +23,44 @@ def make_sym(sigma: torch.Tensor) -> torch.Tensor:
     for i, j in indices:
         logger.warning("Substituting %s with %s", sigma[i, j].item(), symmetric_sigma[i, j].item())
     return symmetric_sigma
+
+
+class TruncatedNormal:
+    """Univariate truncated Normal: computes mean and variance analytically via torch."""
+
+    def __init__(
+        self,
+        loc: torch.Tensor,
+        scale: torch.Tensor,
+        lower_bound: torch.Tensor,
+        upper_bound: torch.Tensor,
+    ) -> None:
+        self.loc = loc
+        self.scale = scale
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+
+        self._standard_normal = distributions.Normal(
+            torch.zeros(self.loc.shape), torch.ones(self.scale.squeeze(2).shape)
+        )
+        self._alpha = (self.lower_bound - self.loc) / self.scale.squeeze(2)
+        self._beta = (self.upper_bound - self.loc) / self.scale.squeeze(2)
+        self._phi_alpha = self._standard_normal.log_prob(self._alpha).exp()
+        self._phi_beta = self._standard_normal.log_prob(self._beta).exp()
+        self.norm_const = self._standard_normal.cdf(self._beta) - self._standard_normal.cdf(self._alpha)
+
+    def mean(self) -> torch.Tensor:
+        return self.loc + self.scale.squeeze(2) * (self._phi_alpha - self._phi_beta) / self.norm_const
+
+    def var(self) -> torch.Tensor:
+        return (
+            self.scale.squeeze(2) ** 2
+            * (
+                torch.tensor(1.0)
+                - (self._beta * self._phi_beta - self._alpha * self._phi_alpha) / self.norm_const
+                - ((self._phi_alpha - self._phi_beta) / self.norm_const) ** 2
+            )
+        ).unsqueeze(2)
 
 
 def mvncdf(x: torch.Tensor, mean: torch.Tensor, cov: torch.Tensor) -> torch.Tensor:

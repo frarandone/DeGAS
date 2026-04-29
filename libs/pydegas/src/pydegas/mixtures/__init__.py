@@ -11,7 +11,7 @@ from pydegas.mixtures.constants import (
 )
 from pydegas.mixtures.distribution import Dist
 from pydegas.mixtures.gaussian_mix import GaussianMix
-from pydegas.mixtures.numerics import make_sym, mvncdf
+from pydegas.mixtures.numerics import TruncatedNormal, make_sym, mvncdf
 
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "GaussianMix",
     "Dist",
     # numerics
+    "TruncatedNormal",
     "make_sym",
     "mvncdf",
     # constants
