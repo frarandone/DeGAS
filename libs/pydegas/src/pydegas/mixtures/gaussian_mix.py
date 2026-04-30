@@ -32,6 +32,16 @@ class GaussianMix:
     def __repr__(self) -> str:
         return "pi: " + str(self.pi) + "\nmu: " + str(self.mu) + "\nsigma: " + str(self.sigma)
 
+    def __deepcopy__(self, memo: dict) -> GaussianMix:
+        # Tensors carry autograd history during optimization; .clone().detach()
+        # gives a leaf copy that is safe to deepcopy / serialize.
+        new = GaussianMix.__new__(GaussianMix)
+        memo[id(self)] = new
+        new.pi = self.pi.clone().detach()
+        new.mu = self.mu.clone().detach()
+        new.sigma = self.sigma.clone().detach()
+        return new
+
     def comp(self, k: int) -> GaussianMix:
         return GaussianMix(
             torch.tensor([[1.0]]),

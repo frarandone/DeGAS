@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from itertools import product
 from typing import Any
 
@@ -22,6 +23,14 @@ class Dist:
 
     def __repr__(self) -> str:
         return str(self)
+
+    def __deepcopy__(self, memo: dict) -> Dist:
+        # Delegates GM tensor detachment to GaussianMix.__deepcopy__.
+        new = Dist.__new__(Dist)
+        memo[id(self)] = new
+        new.var_list = list(self.var_list)
+        new.gm = copy.deepcopy(self.gm, memo)
+        return new
 
 
 def extend_dist(parser: Any, dist: Dist) -> GaussianMix:
