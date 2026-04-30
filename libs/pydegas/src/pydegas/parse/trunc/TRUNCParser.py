@@ -2292,6 +2292,12 @@ class TRUNCParser(Parser):
             else:
                 return visitor.visitChildren(self)
 
+        def _getText(self, data):
+            if self.idd():
+                return self.idd().getVar(data)
+            else:
+                return self.getText()
+
     def var(self):
 
         localctx = TRUNCParser.VarContext(self, self._ctx, self.state)
@@ -2358,6 +2364,21 @@ class TRUNCParser(Parser):
                 return visitor.visitIdd(self)
             else:
                 return visitor.visitChildren(self)
+
+        def getVar(self, data):
+            if self.IDV(1) is None:
+                return self.getText()
+            else:
+                data_idx = int(data[self.IDV(1).getText()][0].item())
+                return self.IDV(0).getText() + "[" + str(data_idx) + "]"
+
+        def getValue(self, data):
+            data_name = self.IDV(0).getText()
+            if self.num() is not None:
+                data_idx = int(self.num().getText())
+            elif self.IDV(1) is not None:
+                data_idx = int(data[self.IDV(1).getText()][0].item())
+            return data[data_name][data_idx]
 
     def idd(self):
 
@@ -2570,6 +2591,10 @@ class TRUNCParser(Parser):
                 return visitor.visitPar(self)
             else:
                 return visitor.visitChildren(self)
+
+        def getValue(self, params_dict):
+            name = self.getText()[1:]  # strip leading '_'
+            return params_dict[name]
 
     def par(self):
 
