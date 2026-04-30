@@ -26,8 +26,12 @@ def from_text(program: str) -> ControlFlowGraph:
         stream = CommonTokenStream(lexer)
         parser = SOGAParser(stream)
         tree = parser.progr()
+        if parser.getNumberOfSyntaxErrors() > 0:
+            raise SyntaxParseError("Failed to parse SOGA program (syntax/grammar error).")
         cfg = ControlFlowGraph()
         ParseTreeWalker().walk(cfg, tree)
+    except SyntaxParseError:
+        raise
     except Exception as e:
         logger.exception("Failed to parse SOGA program: %s", e)
         raise SyntaxParseError("Failed to parse SOGA program (syntax/grammar error).") from e
