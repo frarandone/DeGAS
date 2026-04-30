@@ -3,10 +3,10 @@ import logging
 
 def get_version() -> str:
     try:
-        import importlib.metadata
+        from importlib.metadata import PackageNotFoundError, version
 
-        return importlib.metadata.version("pydegas")
-    except importlib.metadata.PackageNotFoundError:
+        return version("pydegas")
+    except PackageNotFoundError:
         return "0.0.0"
 
 
