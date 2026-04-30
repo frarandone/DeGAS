@@ -180,6 +180,7 @@ def compile_to_soga_text(input_program: str, seed: int | None = None) -> str:
         rng = np.random.default_rng(seed)
         program = input_program
         program = compile_exprnd(program, rng)
+        program = compile_uniform(program, rng)
         program = compile_beta(program, rng)
         program = compile_laplace(program, rng)
         program = compile_gauss(program)
