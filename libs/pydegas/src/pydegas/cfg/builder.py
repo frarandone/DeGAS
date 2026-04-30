@@ -10,6 +10,7 @@ from pathlib import Path
 from antlr4 import CommonTokenStream, InputStream, ParseTreeWalker
 
 from pydegas.cfg.graph import ControlFlowGraph
+from pydegas.exceptions import SyntaxParseError
 from pydegas.parse.soga.SOGALexer import SOGALexer
 from pydegas.parse.soga.SOGAParser import SOGAParser
 
@@ -27,9 +28,9 @@ def from_text(program: str) -> ControlFlowGraph:
         tree = parser.progr()
         cfg = ControlFlowGraph()
         ParseTreeWalker().walk(cfg, tree)
-    except Exception:
-        logger.exception("Failed to parse SOGA program")
-        raise
+    except Exception as e:
+        logger.exception("Failed to parse SOGA program: %s", e)
+        raise SyntaxParseError("Failed to parse SOGA program (syntax/grammar error).") from e
     return cfg
 
 
@@ -44,4 +45,8 @@ def from_file(path: str | Path) -> ControlFlowGraph:
     except OSError:
         logger.exception("Failed to read SOGA source file: %s", path)
         raise
-    return from_text(file_text)
+    try:
+        return from_text(file_text)
+    except SyntaxParseError as e:
+        logger.error("Failed to parse SOGA program from file: %s: %s", path, e)
+        raise e from e
