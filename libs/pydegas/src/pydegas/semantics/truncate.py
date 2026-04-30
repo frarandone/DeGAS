@@ -14,6 +14,7 @@ import torch
 import torch.distributions as distributions
 from antlr4 import CommonTokenStream, InputStream, ParseTreeWalker
 
+from pydegas.exceptions import InvalidConstraintError
 from pydegas.mixtures.constants import INFTY, SMOOTH_EPS, TOL_PROB
 from pydegas.mixtures.distribution import Dist, extend_dist
 from pydegas.mixtures.gaussian_mix import GaussianMix
@@ -604,7 +605,10 @@ def parse_truncation(
     parser = TRUNCParser(stream)
     tree = parser.trunc()
     rule = TruncRule(variables, data, parameters)
-    ParseTreeWalker().walk(rule, tree)
+    try:
+        ParseTreeWalker().walk(rule, tree)
+    except ValueError as e:
+        raise InvalidConstraintError(f"Invalid truncation condition: {condition!r}") from e
     return rule
 
 
@@ -624,6 +628,6 @@ def truncate(
     rule = parse_truncation(distribution.var_list, condition, data, parameters)
     if rule.truncate_func is None:
         logger.error("TruncRule produced no function for condition=%r", condition)
-        raise ValueError(f"TruncRule produced no function for condition={condition!r}")
+        raise InvalidConstraintError(f"Unsupported or invalid truncation condition: {condition!r}")
     normalizer, new_distribution = rule.truncate_func(distribution)
     return normalizer, new_distribution

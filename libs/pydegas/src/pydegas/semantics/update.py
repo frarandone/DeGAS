@@ -12,6 +12,7 @@ from typing import Any
 import torch
 from antlr4 import CommonTokenStream, InputStream, ParseTreeWalker
 
+from pydegas.exceptions import SemanticError
 from pydegas.mixtures.distribution import Dist, extend_dist
 from pydegas.mixtures.gaussian_mix import GaussianMix
 from pydegas.parse.asgmt import ASGMTLexer, ASGMTListener, ASGMTParser
@@ -225,10 +226,13 @@ def parse_assignment(
     parser = ASGMTParser(stream)
     tree = parser.assignment()
     rule = AsgmtRule(variables, data, parameters)
-    ParseTreeWalker().walk(rule, tree)
+    try:
+        ParseTreeWalker().walk(rule, tree)
+    except ValueError as e:
+        raise SemanticError(f"Invalid assignment expression: {expression!r}") from e
     if rule.update_func is None:
         logger.error("AsgmtRule produced no update function for expression=%r", expression)
-        raise ValueError(f"AsgmtRule produced no update function for expression={expression!r}")
+        raise SemanticError(f"Unsupported or invalid assignment expression: {expression!r}")
     return rule.update_func
 
 

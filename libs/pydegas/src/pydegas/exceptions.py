@@ -19,3 +19,15 @@ class SyntaxParseError(ParseError):
 
 class PreprocessError(ParseError):
     """Preprocessing step failed (normalization, helper syntax rewriting, etc.)."""
+
+
+class SemanticError(PyDeGASError):
+    """Parsed fine, but the program or expression is invalid/meaningless/unsupported."""
+
+
+class ModelConstructionError(SemanticError):
+    """Building/updating internal semantic objects failed (inconsistent internal state)."""
+
+
+class InvalidConstraintError(SemanticError):
+    """Constraints/conditions are inconsistent or ill-formed at the semantic level."""
