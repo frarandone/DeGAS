@@ -1,9 +1,9 @@
 currX = 0.8;
 
-phi = 1;
-phifirst = 1;
-phisecond = 1;
 counter = 0;
+
+allless10sofar = 1;
+OH = 0;
 
 for i in range(30) {
 
@@ -13,24 +13,23 @@ for i in range(30) {
     newX = 1.32 * currX - 0.032 * xSquare + xNoise;
 
     currX = newX;
-
     
-    if counter < 20 {
-        if currX > 10 {
-            phi = 0;
-            phifirst = 0;
+    if currX > 10 {
+        allless10sofar = 0;
+    } else {
+        skip;
+    } end if;
+    
+    if counter > 20 {
+        if allless10sofar == 1{
+            OH = 1;
         } else {
             skip;
         } end if;
     } else {
-        if currX < 10 {
-            phi = 0;
-            phisecond = 0;
-        } else {
-            skip;
-        } end if;
+        skip;
     } end if;
-    
+
 
     counter = counter + 1;
 } end for;
