@@ -1,0 +1,136 @@
+array[9] tacts;
+array[9] endacts;
+
+/* Total time */
+t = 0;
+
+/* Activity durations */
+tacts[0] = _mu0 * _mu0 + gm([1], [0.], [1.]);
+tacts[1] = _mu1 * _mu1 + gm([1], [0.], [1.]);
+tacts[2] = _mu2 * _mu2 + gm([1], [0.], [1.]);
+tacts[3] = _mu3 * _mu3 + gm([1], [0.], [1.]);
+tacts[4] = _mu4 * _mu4 + gm([1], [0.], [1.]);
+tacts[5] = _mu5 * _mu5 + gm([1], [0.], [1.]);
+tacts[6] = _mu6 * _mu6 + gm([1], [0.], [1.]);
+tacts[7] = _mu7 * _mu7 + gm([1], [0.], [1.]);
+tacts[8] = _mu8 * _mu8 + gm([1], [0.], [1.]);
+
+observe(tacts[0] > 0.);
+observe(tacts[1] > 0.);
+observe(tacts[2] > 0.);
+observe(tacts[3] > 0.);
+observe(tacts[4] > 0.);
+observe(tacts[5] > 0.);
+observe(tacts[6] > 0.);
+observe(tacts[7] > 0.);
+observe(tacts[8] > 0.);
+
+/* Gateway probabilities */
+p0 = _p0 * _p0;   /* enter outer parallel block */
+p1 = _p1 * _p1;   /* do O_CANCELLED on outer right branch */
+p2 = _p2 * _p2;   /* enter inner parallel block with A_FINALIZED and O_SELECTED path */
+p3 = _p3 * _p3;   /* do A_CANCELLED */
+p4 = _p4 * _p4;   /* enter inner parallel block with W_Call_missing_information */
+p5 = _p5 * _p5;   /* do W_Assess_application */
+
+
+if uniform([0., 1.], 2) - p0 < 0. {
+
+    /* Outer parallel split */
+    branch0 = t;
+    branch1 = t;
+
+    /* Left outer branch */
+    if uniform([0., 1.], 2) - p2 < 0. {
+
+        /* Inner parallel split:
+           branch00 = A_FINALIZED
+           branch01 = O_SELECTED path
+        */
+        branch00 = branch0;
+        branch01 = branch0;
+
+        /* branch00: A_FINALIZED */
+        endacts[0] = branch00 + tacts[0];
+        branch00 = endacts[0];
+
+        /* branch01: O_SELECTED path */
+        endacts[1] = branch01 + tacts[1];
+        branch01 = endacts[1];
+
+        endacts[2] = branch01 + tacts[2];
+        branch01 = endacts[2];
+
+        endacts[3] = branch01 + tacts[3];
+        branch01 = endacts[3];
+
+        /* HERE */
+        if uniform([0., 1.], 2) - p4 < 0. {
+
+            branch10 = branch01;
+            branch11 = branch01;
+
+            if uniform([0., 1.], 2) - p5 < 0. {
+                endacts[5] = branch10 + tacts[5];
+                branch10 = endacts[5];
+            } else {
+                skip;
+            } end if;
+
+            prune(10);
+            endacts[4] = branch11 + tacts[4];
+            branch11 = endacts[4];
+
+            if branch10 - branch11 < 0. {
+                branch01 = branch11;
+            } else {
+                branch01 = branch10;
+            } end if;
+            prune(10);
+  
+        } else {
+            skip;
+        } end if;
+
+        /* Join inner parallel A_FINALIZED || O_SELECTED path */
+        if branch00 - branch01 < 0. {
+            branch0 = branch01;
+        } else {
+            branch0 = branch00;
+        } end if;
+        prune(10);
+    } else {
+        skip;
+    } end if;
+
+    /* A_CANCELLED optional on left outer branch */
+    if uniform([0., 1.], 2) - p3 < 0. {
+        endacts[7] = branch0 + tacts[7];
+        branch0 = endacts[7];
+    } else {
+        skip;
+    } end if;
+    prune(10);
+
+    /* Right outer branch: O_CANCELLED optional */
+    if uniform([0., 1.], 2) - p1 < 0. {
+        endacts[6] = branch1 + tacts[6];
+        branch1 = endacts[6];
+    } else {
+        skip;
+    } end if;
+    prune(10);
+    /* Join outer parallel */
+    if branch0 - branch1 < 0. {
+        t = branch1;
+    } else {
+        t = branch0;
+    } end if;
+    prune(10);
+} else {
+    skip;
+} end if;
+
+/* END */
+endacts[8] = t + tacts[8];
+t = endacts[8];

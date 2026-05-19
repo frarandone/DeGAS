@@ -24,7 +24,6 @@ Activities:
 */
 
 array[21] tacts;
-array[21] startacts;
 array[21] endacts;
 
 /* Total time */
@@ -84,8 +83,7 @@ pafterreleasepo = _p4 * _p4 ;
 pafterrelinv    = _p5 * _p5 ;
 
 /* Start -> Create Purchase Requisition */
-startacts[0] = t;
-endacts[0] = startacts[0] + tacts[0];
+endacts[0] = t + tacts[0];
 t = endacts[0];
 
 /* After Create Purchase Requisition:
@@ -95,8 +93,7 @@ t = endacts[0];
 if uniform([0., 1.], 2) - pcreatepr < 0. {
 
     /* Analyze Purchase Requisition */
-    startacts[1] = t;
-    endacts[1] = startacts[1] + tacts[1];
+    endacts[1] = t + tacts[1];
     t = endacts[1];
 
     /* After Analyze Purchase Requisition:
@@ -104,8 +101,7 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
        - or end
     */
     if uniform([0., 1.], 2) - pafteranpr < 0. {
-        startacts[2] = t;
-        endacts[2] = startacts[2] + tacts[2];
+        endacts[2] = t + tacts[2];
         t = endacts[2];
     } else {
         skip;
@@ -113,13 +109,11 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
 
 } else {
     /* Create Request for Quotation */
-    startacts[3] = t;
-    endacts[3] = startacts[3] + tacts[3];
+    endacts[3] = t + tacts[3];
     t = endacts[3];
 
     /* Analyze Request for Quotation */
-    startacts[4] = t;
-    endacts[4] = startacts[4] + tacts[4];
+    endacts[4] = t + tacts[4];
     t = endacts[4];
 
     /* After Analyze Request for Quotation:
@@ -127,8 +121,7 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
     - or continue
     */
     if uniform([0., 1.], 2) - pafteranrfq < 0. {
-        startacts[5] = t;
-        endacts[5] = startacts[5] + tacts[5];
+        endacts[5] = t + tacts[5];
         t = endacts[5];
     } else {
         skip;
@@ -141,48 +134,39 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
     if uniform([0., 1.], 2) - pafterrfqblock < 0. {
 
         /* Send Request for Quotation to Supplier */
-        startacts[6] = t;
-        endacts[6] = startacts[6] + tacts[6];
+        endacts[6] = t + tacts[6];
         t = endacts[6];
 
         /* Create Quotation comparison Map */
-        startacts[7] = t;
-        endacts[7] = startacts[7] + tacts[7];
+        endacts[7] = t + tacts[7];
         t = endacts[7];
 
         /* Analyze Quotation Comparison Map */
-        startacts[8] = t;
-        endacts[8] = startacts[8] + tacts[8];
+        endacts[8] = t + tacts[8];
         t = endacts[8];
 
         /* Choose best option */
-        startacts[9] = t;
-        endacts[9] = startacts[9] + tacts[9];
+        endacts[9] = t + tacts[9];
         t = endacts[9];
 
         /* Settle Conditions With Supplier */
-        startacts[10] = t;
-        endacts[10] = startacts[10] + tacts[10];
+        endacts[10] = t + tacts[10];
         t = endacts[10];
 
         /* Create Purchase Order */
-        startacts[11] = t;
-        endacts[11] = startacts[11] + tacts[11];
+        endacts[11] = t + tacts[11];
         t = endacts[11];
 
         /* Confirm Purchase Order */
-        startacts[12] = t;
-        endacts[12] = startacts[12] + tacts[12];
+        endacts[12] = t + tacts[12];
         t = endacts[12];
 
         /* Deliver Goods Services */
-        startacts[13] = t;
-        endacts[13] = startacts[13] + tacts[13];
+        endacts[13] = t + tacts[13];
         t = endacts[13];
 
         /* Release Purchase Order */
-        startacts[14] = t;
-        endacts[14] = startacts[14] + tacts[14];
+        endacts[14] = t + tacts[14];
         t = endacts[14];
 
         /* After Release Purchase Order:
@@ -192,18 +176,15 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
         if uniform([0., 1.], 2) - pafterreleasepo < 0. {
 
             /* Approve Purchase Order for payment */
-            startacts[15] = t;
-            endacts[15] = startacts[15] + tacts[15];
+            endacts[15] = t + tacts[15];
             t = endacts[15];
 
             /* Send Invoice */
-            startacts[16] = t;
-            endacts[16] = startacts[16] + tacts[16];
+            endacts[16] = t + tacts[16];
             t = endacts[16];
 
             /* Release Supplier's Invoice */
-            startacts[17] = t;
-            endacts[17] = startacts[17] + tacts[17];
+            endacts[17] = t + tacts[17];
             t = endacts[17];
         } else {
             skip;
@@ -216,8 +197,7 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
         if uniform([0., 1.], 2) - pafterrelinv < 0. {
 
             /* Settle Dispute With Supplier */
-            startacts[18] = t;
-            endacts[18] = startacts[18] + tacts[18];
+            endacts[18] = t + tacts[18];
             t = endacts[18];
 
         } else {
@@ -225,13 +205,11 @@ if uniform([0., 1.], 2) - pcreatepr < 0. {
         } end if;
 
         /* Authorize Supplier's Invoice payment */
-        startacts[19] = t;
-        endacts[19] = startacts[19] + tacts[19];
+        endacts[19] = t + tacts[19];
         t = endacts[19];
 
         /* Pay Invoice */
-        startacts[20] = t;
-        endacts[20] = startacts[20] + tacts[20];
+        endacts[20] = t + tacts[20];
         t = endacts[20];
     } else {
         skip;

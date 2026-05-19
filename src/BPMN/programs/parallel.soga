@@ -28,38 +28,37 @@ Activities:
 */
 
 array[25] tacts;
-array[25] startacts;
 array[25] endacts;
 
 /* Total time */
 t = 0;
 
 /* Activity durations */
-tacts[0]  = _mu0  * _mu0  + gm([1], [0.], [10.]);
-tacts[1]  = _mu1  * _mu1  + gm([1], [0.], [10.]);
-tacts[2]  = _mu2  * _mu2  + gm([1], [0.], [10.]);
-tacts[3]  = _mu3  * _mu3  + gm([1], [0.], [10.]);
-tacts[4]  = _mu4  * _mu4  + gm([1], [0.], [10.]);
-tacts[5]  = _mu5  * _mu5  + gm([1], [0.], [10.]);
-tacts[6]  = _mu6  * _mu6  + gm([1], [0.], [10.]);
-tacts[7]  = _mu7  * _mu7  + gm([1], [0.], [10.]);
-tacts[8]  = _mu8  * _mu8  + gm([1], [0.], [10.]);
-tacts[9]  = _mu9  * _mu9  + gm([1], [0.], [10.]);
-tacts[10] = _mu10 * _mu10 + gm([1], [0.], [10.]);
-tacts[11] = _mu11 * _mu11 + gm([1], [0.], [10.]);
-tacts[12] = _mu12 * _mu12 + gm([1], [0.], [10.]);
-tacts[13] = _mu13 * _mu13 + gm([1], [0.], [10.]);
-tacts[14] = _mu14 * _mu14 + gm([1], [0.], [10.]);
-tacts[15] = _mu15 * _mu15 + gm([1], [0.], [10.]);
-tacts[16] = _mu16 * _mu16 + gm([1], [0.], [10.]);
-tacts[17] = _mu17 * _mu17 + gm([1], [0.], [10.]);
-tacts[18] = _mu18 * _mu18 + gm([1], [0.], [10.]);
-tacts[19] = _mu19 * _mu19 + gm([1], [0.], [10.]);
-tacts[20] = _mu20 * _mu20 + gm([1], [0.], [10.]);
-tacts[21] = _mu21 * _mu21 + gm([1], [0.], [10.]);
-tacts[22] = _mu22 * _mu22 + gm([1], [0.], [10.]);
-tacts[23] = _mu23 * _mu23 + gm([1], [0.], [10.]);
-tacts[24] = _mu24 * _mu24 + gm([1], [0.], [10.]);
+tacts[0]  = _mu0  * _mu0  + gm([1], [0.], [0.1]);
+tacts[1]  = _mu1  * _mu1  + gm([1], [0.], [1.]);
+tacts[2]  = _mu2  * _mu2  + gm([1], [0.], [1.]);
+tacts[3]  = _mu3  * _mu3  + gm([1], [0.], [1.]);
+tacts[4]  = _mu4  * _mu4  + gm([1], [0.], [1.]);
+tacts[5]  = _mu5  * _mu5  + gm([1], [0.], [1.]);
+tacts[6]  = _mu6  * _mu6  + gm([1], [0.], [1.]);
+tacts[7]  = _mu7  * _mu7  + gm([1], [0.], [1.]);
+tacts[8]  = _mu8  * _mu8  + gm([1], [0.], [1.]);
+tacts[9]  = _mu9  * _mu9  + gm([1], [0.], [1.]);
+tacts[10] = _mu10 * _mu10 + gm([1], [0.], [1.]);
+tacts[11] = _mu11 * _mu11 + gm([1], [0.], [1.]);
+tacts[12] = _mu12 * _mu12 + gm([1], [0.], [1.]);
+tacts[13] = _mu13 * _mu13 + gm([1], [0.], [1.]);
+tacts[14] = _mu14 * _mu14 + gm([1], [0.], [1.]);
+tacts[15] = _mu15 * _mu15 + gm([1], [0.], [1.]);
+tacts[16] = _mu16 * _mu16 + gm([1], [0.], [1.]);
+tacts[17] = _mu17 * _mu17 + gm([1], [0.], [1.]);
+tacts[18] = _mu18 * _mu18 + gm([1], [0.], [1.]);
+tacts[19] = _mu19 * _mu19 + gm([1], [0.], [1.]);
+tacts[20] = _mu20 * _mu20 + gm([1], [0.], [1.]);
+tacts[21] = _mu21 * _mu21 + gm([1], [0.], [1.]);
+tacts[22] = _mu22 * _mu22 + gm([1], [0.], [1.]);
+tacts[23] = _mu23 * _mu23 + gm([1], [0.], [1.]);
+tacts[24] = _mu24 * _mu24 + gm([1], [0.], [0.1]);
 
 observe(tacts[0]  > 0.);
 observe(tacts[1]  > 0.);
@@ -106,21 +105,21 @@ p14 = _p14 * _p14 ;   /* final choice: A_DECLINED branch vs O_ACCEPTED branch */
 p15 = _p15 * _p15 ;   /* after A_DECLINED: do O_DECLINED */
 
 /* START */
-startacts[0] = t;
-endacts[0] = startacts[0] + tacts[0];
+
+endacts[0] = t + tacts[0];
 t = endacts[0];
 
 /* A_SUBMITTED */
-startacts[1] = t;
-endacts[1] = startacts[1] + tacts[1];
+endacts[1] = t + tacts[1];
 t = endacts[1];
 
 /* A_PARTLYSUBMITTED */
-startacts[2] = t;
-endacts[2] = startacts[2] + tacts[2];
+
+endacts[2] = t + tacts[2];
 t = endacts[2];
 
-prune(30);
+prune(40);
+
 /* After A_PARTLYSUBMITTED:
    - skip to final decision region
    - or go through fraud/fix/preaccepted region
@@ -129,60 +128,56 @@ if uniform([0., 1.], 2) - p0 < 0. {
 
     /* W_Assess_fraud optional */
     if uniform([0., 1.], 2) - p1 < 0. {
-        startacts[3] = t;
-        endacts[3] = startacts[3] + tacts[3];
+        endacts[3] = t + tacts[3];
         t = endacts[3];
     } else {
         skip;
-        prune(30);
+        prune(40);
     } end if;
 
-    prune(30);
+    prune(40);
 
     /* W_Fix_incomplete_submission optional */
     if uniform([0., 1.], 2) - p2 < 0. {
-        startacts[4] = t;
-        endacts[4] = startacts[4] + tacts[4];
+        endacts[4] = t + tacts[4];
         t = endacts[4];
     } else {
         skip;
-        prune(30);
+        prune(40);
     } end if;
 
-    prune(30);
+    prune(40);
 
     /* A_PREACCEPTED branch optional */
     if uniform([0., 1.], 2) - p3 < 0. {
 
-        startacts[5] = t;
-        endacts[5] = startacts[5] + tacts[5];
+        endacts[5] = t + tacts[5];
         t = endacts[5];
 
-        startacts[6] = t;
-        endacts[6] = startacts[6] + tacts[6];
+        endacts[6] = t + tacts[6];
         t = endacts[6];
-
+        prune(40);
         /* A_ACCEPTED optional */
         if uniform([0., 1.], 2) - p4 < 0. {
-            startacts[7] = t;
-            endacts[7] = startacts[7] + tacts[7];
+            endacts[7] = t + tacts[7];
             t = endacts[7];
+            prune(40);
         } else {
             skip;
-            prune(30);
+            prune(40);
         } end if;
-
+    prune(40);
     } else {
         skip;
-        prune(30);
+        prune(40);
     } end if;
+    prune(40);
 
 } else {
     skip;
-    prune(30);
+    prune(40);
 } end if;
-prune(30);
-
+prune(40);
 
 /* After this block:
    - either enter outer parallel region
@@ -205,46 +200,44 @@ if uniform([0., 1.], 2) - p5 < 0. {
         branch01 = branch0;
 
         /* branch00: A_FINALIZED */
-        startacts[8] = branch00;
-        endacts[8] = startacts[8] + tacts[8];
+        endacts[8] = branch00 + tacts[8];
         branch00 = endacts[8];
 
         /* branch01: O_SELECTED path */
-        startacts[9] = branch01;
-        endacts[9] = startacts[9] + tacts[9];
+        endacts[9] = branch01 + tacts[9];
         branch01 = endacts[9];
 
-        startacts[10] = branch01;
-        endacts[10] = startacts[10] + tacts[10];
+        endacts[10] = branch01 + tacts[10];
         branch01 = endacts[10];
 
-        startacts[11] = branch01;
-        endacts[11] = startacts[11] + tacts[11];
+        endacts[11] = branch01 + tacts[11];
         branch01 = endacts[11];
 
+        prune(40);
+        
         /* W_Call_after_offer optional */
         if uniform([0., 1.], 2) - p9 < 0. {
-            startacts[12] = branch01;
-            endacts[12] = startacts[12] + tacts[12];
+            endacts[12] = branch01 + tacts[12];
             branch01 = endacts[12];
+            prune(40);
         } else {
             skip;
-            prune(30);
+            prune(40);
         } end if;
 
-        prune(30);
+        prune(40);
 
         /* O_SENT_BACK optional */
         if uniform([0., 1.], 2) - p10 < 0. {
-            startacts[13] = branch01;
-            endacts[13] = startacts[13] + tacts[13];
+            endacts[13] = branch01 + tacts[13];
             branch01 = endacts[13];
+            prune(40);
         } else {
             skip;
-            prune(30);
+            prune(40);
         } end if;
 
-        prune(30);
+        prune(40);
 
         /* Optional inner parallel with W_Assess_application and W_Call_missing_information */
         if uniform([0., 1.], 2) - p11 < 0. {
@@ -254,19 +247,18 @@ if uniform([0., 1.], 2) - p5 < 0. {
 
             /* branch10: W_Assess_application optional */
             if uniform([0., 1.], 2) - p12 < 0. {
-                startacts[15] = branch10;
-                endacts[15] = startacts[15] + tacts[15];
+                endacts[15] = branch10 + tacts[15];
                 branch10 = endacts[15];
+                prune(40);
             } else {
                 skip;
-                prune(30);
+                prune(40);
             } end if;
 
-            prune(30);
+            prune(40);
 
             /* branch11: W_Call_missing_information */
-            startacts[14] = branch11;
-            endacts[14] = startacts[14] + tacts[14];
+            endacts[14] = branch11 + tacts[14];
             branch11 = endacts[14];
 
             /* Join inner parallel */
@@ -276,12 +268,13 @@ if uniform([0., 1.], 2) - p5 < 0. {
                 branch01 = branch10;
             } end if;
 
-            prune(30);
+            prune(40);
 
         } else {
             skip;
-            prune(30);
+            prune(40);
         } end if;
+        prune(40);
 
         /* Join inner parallel A_FINALIZED || O_SELECTED path */
         if branch00 - branch01 < 0. {
@@ -290,37 +283,30 @@ if uniform([0., 1.], 2) - p5 < 0. {
             branch0 = branch00;
         } end if;
 
-        prune(30);
+        prune(40);
 
     } else {
         skip;
-        prune(30);
     } end if;
-
-    prune(30);
+    prune(40);
 
     /* A_CANCELLED optional on left outer branch */
     if uniform([0., 1.], 2) - p8 < 0. {
-        startacts[17] = branch0;
-        endacts[17] = startacts[17] + tacts[17];
+        endacts[17] = branch0 + tacts[17];
         branch0 = endacts[17];
     } else {
         skip;
-        prune(30);
     } end if;
-
-    prune(30);
+    prune(40);
 
     /* Right outer branch: O_CANCELLED optional */
     if uniform([0., 1.], 2) - p6 < 0. {
-        startacts[16] = branch1;
-        endacts[16] = startacts[16] + tacts[16];
+        endacts[16] = branch1 + tacts[16];
         branch1 = endacts[16];
     } else {
         skip;
-        prune(30);
     } end if;
-    prune(30);
+    prune(40);
 
     /* Join outer parallel */
     if branch0 - branch1 < 0. {
@@ -329,14 +315,13 @@ if uniform([0., 1.], 2) - p5 < 0. {
         t = branch0;
     } end if;
 
-    prune(30);
+    prune(40);
 
 } else {
     skip;
-    prune(30);
 } end if;
 
-prune(30);
+prune(40);    prune(40);
 
 /* Final decision region:
    1) direct to END
@@ -346,58 +331,51 @@ prune(30);
 if uniform([0., 1.], 2) - p13 < 0. {
 
     skip;
-    prune(30);
+    prune(40);
 
 } else {
 
     if uniform([0., 1.], 2) - p14 < 0. {
 
         /* A_DECLINED */
-        startacts[18] = t;
-        endacts[18] = startacts[18] + tacts[18];
+        endacts[18] = t + tacts[18];
         t = endacts[18];
 
         /* O_DECLINED optional */
         if uniform([0., 1.], 2) - p15 < 0. {
-            startacts[19] = t;
-            endacts[19] = startacts[19] + tacts[19];
+            endacts[19] = t + tacts[19];
             t = endacts[19];
         } else {
             skip;
         } end if;
 
-        prune(30);
+        prune(40);
 
     } else {
 
         /* O_ACCEPTED */
-        startacts[20] = t;
-        endacts[20] = startacts[20] + tacts[20];
+        endacts[20] = t + tacts[20];
         t = endacts[20];
 
         /* A_APPROVED */
-        startacts[21] = t;
-        endacts[21] = startacts[21] + tacts[21];
+        endacts[21] = t + tacts[21];
         t = endacts[21];
 
         /* A_REGISTERED */
-        startacts[22] = t;
-        endacts[22] = startacts[22] + tacts[22];
+        endacts[22] = t + tacts[22];
         t = endacts[22];
 
         /* A_ACTIVATED */
-        startacts[23] = t;
-        endacts[23] = startacts[23] + tacts[23];
+        endacts[23] = t + tacts[23];
         t = endacts[23];
 
-        prune(30);
+        /* prune(40); */
 
     } end if;
 
 } end if;
 
 /* END */
-startacts[24] = t;
-endacts[24] = startacts[24] + tacts[24];
+endacts[24] = t + tacts[24];
 t = endacts[24];
 

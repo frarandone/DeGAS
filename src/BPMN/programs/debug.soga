@@ -1,0 +1,86 @@
+array[7] tacts;
+array[7] endacts;
+
+/* Total time */
+t = 0;
+
+/* Activity durations */
+tacts[0]  = _mu0  * _mu0  + gm([1], [0.], [10.]);
+tacts[1]  = _mu1  * _mu1  + gm([1], [0.], [10.]);
+tacts[2]  = _mu2  * _mu2  + gm([1], [0.], [10.]);
+tacts[3]  = _mu3  * _mu3  + gm([1], [0.], [10.]);
+tacts[4]  = _mu4  * _mu4  + gm([1], [0.], [10.]);
+tacts[5]  = _mu5  * _mu5  + gm([1], [0.], [10.]);
+tacts[6]  = _mu6  * _mu6  + gm([1], [0.], [10.]);
+
+observe(tacts[0]  > 0.);
+observe(tacts[1]  > 0.);
+observe(tacts[2]  > 0.);
+observe(tacts[3]  > 0.);
+observe(tacts[4]  > 0.);
+observe(tacts[5]  > 0.);
+observe(tacts[6]  > 0.);
+
+/* Gateway probabilities */
+p0  = _p0  * _p0  + gm([1], [0.], [0.1]);   /* after A_PARTLYSUBMITTED: go to fraud/fix/preaccepted block */
+p1  = _p1  * _p1  + gm([1], [0.], [0.1]);   /* do W_Assess_fraud */
+p2  = _p2  * _p2  + gm([1], [0.], [0.1]);   /* do W_Fix_incomplete_submission */
+
+
+endacts[0] = t + tacts[0];
+t = endacts[0];
+
+if uniform([0., 1.], 2) - p0 < 0. {
+
+    /* Outer parallel split */
+    branch0 = t;
+    branch1 = t;
+
+    /* Left outer branch */
+    if uniform([0., 1.], 2) - p1 < 0. {
+
+        branch00 = branch0;
+        branch01 = branch0;
+
+        endacts[1] = branch00 + tacts[1];
+        branch00 = endacts[1];
+
+        endacts[2] = branch01 + tacts[2];
+        branch01 = endacts[2];
+
+        endacts[3] = branch01 + tacts[3];
+        branch01 = endacts[3];
+
+        /* W_Call_after_offer optional */
+        if uniform([0., 1.], 2) - p2 < 0. {
+            endacts[4] = branch01 + tacts[4];
+            branch01 = endacts[4];
+        } else {
+            skip;
+        } end if;
+
+        if branch00 - branch01 < 0. {
+            branch0 = branch01;
+        } else {
+            branch0 = branch00;
+        } end if;
+        prune(5);
+    } else {
+        endacts[5] = branch1 + tacts[5];
+        branch1 = endacts[5];
+        prune(5);
+    } end if;
+
+    /* Join outer parallel */
+    if branch0 - branch1 < 0. {
+        t = branch1;
+    } else {
+        t = branch0;
+    } end if;
+    prune(5);
+} else {
+    skip;
+} end if;
+
+endacts[6] = t + tacts[6];
+t = endacts[6];
