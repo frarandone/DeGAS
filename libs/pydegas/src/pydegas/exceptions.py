@@ -31,3 +31,7 @@ class ModelConstructionError(SemanticError):
 
 class InvalidConstraintError(SemanticError):
     """Constraints/conditions are inconsistent or ill-formed at the semantic level."""
+
+
+class LossCompileError(ParseError):
+    """The DeGASLoss DSL source could not be compiled (syntax or semantic error)."""
