@@ -251,8 +251,8 @@ def smooth(cfg: ControlFlowGraph, smooth_eps: float = SMOOTH_EPS) -> None:
     and writes node.smooth on nodes where the original expression or
     condition would cause degeneracy.
     """
-    logger.info("smoothing CFG  eps=%.2e  vars=%s", smooth_eps, cfg.ID_list)
+    logger.debug("smoothing CFG  eps=%.2e  vars=%s", smooth_eps, cfg.ID_list)
     exec_queue: list = [cfg.root]
     while exec_queue:
         _visit(exec_queue.pop(0), cfg.ID_list, cfg.smoothed_vars, cfg.data, exec_queue, smooth_eps)
-    logger.info("smoothing done  smoothed_vars=%s", cfg.smoothed_vars)
+    logger.debug("smoothing done  smoothed_vars=%s", cfg.smoothed_vars)

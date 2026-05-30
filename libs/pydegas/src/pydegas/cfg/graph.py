@@ -164,7 +164,7 @@ class ControlFlowGraph(SOGAListener):
             parent.children.append(node)
         self._current_node = node
         self.node_list[node.name] = node
-        logger.info(
+        logger.debug(
             "CFG built: %d nodes, vars=%s",
             len(self.node_list),
             self.ID_list,
