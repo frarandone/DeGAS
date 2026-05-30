@@ -24,6 +24,7 @@ from pydegas.parse.trunc import TRUNCLexer, TRUNCListener, TRUNCParser
 
 logger = logging.getLogger(__name__)
 
+TRUNC_TREE_CACHE: dict[str, Any] = {}
 
 # Weight normalisation
 
@@ -600,15 +601,19 @@ def parse_truncation(
     parameters: dict[str, torch.Tensor],
 ) -> TruncRule:
     """Parse *condition* with the TRUNC grammar and return the populated rule."""
-    lexer = TRUNCLexer(InputStream(condition))
-    stream = CommonTokenStream(lexer)
-    parser = TRUNCParser(stream)
-    tree = parser.trunc()
+
+    if condition not in TRUNC_TREE_CACHE:
+        lexer = TRUNCLexer(InputStream(condition))
+        stream = CommonTokenStream(lexer)
+        parser = TRUNCParser(stream)
+        TRUNC_TREE_CACHE[condition] = parser.trunc()
     rule = TruncRule(variables, data, parameters)
+
     try:
-        ParseTreeWalker().walk(rule, tree)
+        ParseTreeWalker().walk(rule, TRUNC_TREE_CACHE[condition])
     except ValueError as e:
         raise InvalidConstraintError(f"Invalid truncation condition: {condition!r}") from e
+
     return rule
 
 

@@ -18,6 +18,9 @@ from pydegas.mixtures.gaussian_mix import GaussianMix
 from pydegas.parse.asgmt import ASGMTLexer, ASGMTListener, ASGMTParser
 
 
+ASGMT_TREE_CACHE: dict[str, Any] = {}
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -221,13 +224,15 @@ def parse_assignment(
     parameters: dict[str, torch.Tensor],
 ) -> Callable[[Dist], Dist]:
     """Parse *expression* with the ASGMT grammar and return the update function."""
-    lexer = ASGMTLexer(InputStream(expression))
-    stream = CommonTokenStream(lexer)
-    parser = ASGMTParser(stream)
-    tree = parser.assignment()
+    if expression not in ASGMT_TREE_CACHE:
+        lexer = ASGMTLexer(InputStream(expression))
+        stream = CommonTokenStream(lexer)
+        parser = ASGMTParser(stream)
+        ASGMT_TREE_CACHE[expression] = parser.assignment()
+
     rule = AsgmtRule(variables, data, parameters)
     try:
-        ParseTreeWalker().walk(rule, tree)
+        ParseTreeWalker().walk(rule, ASGMT_TREE_CACHE[expression])
     except ValueError as e:
         raise SemanticError(f"Invalid assignment expression: {expression!r}") from e
     if rule.update_func is None:

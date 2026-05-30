@@ -214,6 +214,8 @@ def soga(
             return
         current_p, current_dist = merge(node.list_dist)
         node.list_dist = []
+        if Kmax is not None:
+            current_dist = prune(current_dist, pruning, Kmax)
         child = node.children[0]
         update_child(child, current_dist, current_p, None, exec_queue)
 
