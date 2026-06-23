@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { RunStatus, StepOut } from "../types";
+import type { RunOutcome, RunStatus, StepOut } from "../types";
+
+// Badge label + color per terminal outcome.
+const OUTCOME_BADGE: Record<RunOutcome, { label: string; color: string }> = {
+  converged: { label: "converged", color: "#99c794" },
+  not_converged: { label: "not converged", color: "#ec5f67" },
+  stopped: { label: "stopped", color: "#fac863" },
+  run_timeout: { label: "timed out", color: "#fac863" },
+};
 
 const COLORS = [
   "#6699cc",
@@ -18,11 +26,13 @@ interface Props {
   steps: StepOut[];
   status: RunStatus;
   error: string | null;
-  converged: boolean | null;
+  outcome: RunOutcome | null;
   theme: "light" | "dark";
+  canDownload: boolean;
+  onDownload: () => void;
 }
 
-export function ResultsPanel({ steps, status, error, converged, theme }: Props) {
+export function ResultsPanel({ steps, status, error, outcome, theme, canDownload, onDownload }: Props) {
   const dark = theme === "dark";
   const bg = dark ? "#0a0a0a" : "#fafaf9";
   const fg = dark ? "#e8e6e0" : "#1a1a1a";
@@ -168,43 +178,70 @@ export function ResultsPanel({ steps, status, error, converged, theme }: Props) 
           />
         ))}
 
-        {status === "running" && (
-          <span
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {status === "running" && (
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              step {steps.length > 0 ? steps[steps.length - 1].step + 1 : "…"}
+            </span>
+          )}
+          {status === "done" && steps.length > 0 && (
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {steps.length} steps
+            </span>
+          )}
+          {outcome !== null && status === "done" && (
+            <span
+              style={{
+                fontSize: 10,
+                padding: "2px 7px",
+                borderRadius: 20,
+                background: `${OUTCOME_BADGE[outcome].color}22`,
+                border: `1px solid ${OUTCOME_BADGE[outcome].color}`,
+                color: OUTCOME_BADGE[outcome].color,
+              }}
+            >
+              {OUTCOME_BADGE[outcome].label}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={!canDownload}
+            title="Download run data (JSON)"
             style={{
-              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "3px 8px",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: "transparent",
+              color: canDownload ? "var(--text-primary)" : "var(--text-muted)",
               fontSize: 11,
-              color: "var(--text-muted)",
+              cursor: canDownload ? "pointer" : "not-allowed",
+              opacity: canDownload ? 1 : 0.5,
+              fontFamily: "inherit",
             }}
           >
-            step {steps.length > 0 ? steps[steps.length - 1].step + 1 : "…"}
-          </span>
-        )}
-        {status === "done" && steps.length > 0 && (
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: 11,
-              color: "var(--text-muted)",
-            }}
-          >
-            {steps.length} steps
-          </span>
-        )}
-        {converged !== null && status === "done" && (
-          <span
-            style={{
-              marginLeft: converged ? 0 : "auto",
-              fontSize: 10,
-              padding: "2px 7px",
-              borderRadius: 20,
-              background: converged ? "#99c79422" : "#ec5f6722",
-              border: `1px solid ${converged ? "#99c794" : "#ec5f67"}`,
-              color: converged ? "#99c794" : "#ec5f67",
-            }}
-          >
-            {converged ? "converged" : "not converged"}
-          </span>
-        )}
+            {/* Inline download glyph — no icon-library dependency. */}
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            data
+          </button>
+        </div>
       </div>
 
       {status === "done" && finalParams && Object.keys(finalParams).length > 0 && (
