@@ -78,8 +78,29 @@ LOSS_REGISTRY: dict[str, Callable[..., LossFunction]] = {
 }
 
 
+# DeGASLoss DSL source equivalents of the built-in losses, used by the UI to
+# preview/inspect them and to pre-fill the loss editor.
+LOSS_DSL_SOURCE: dict[str, str] = {
+    "l2_distance": (
+        "loss l2_distance(trajectories: traj_set, distribution: dist, indices: index_list) =\n"
+        "    sum( (trajectories[:, indices] - distribution.mean[indices]) ^ 2 )\n"
+    ),
+    "neg_log_likelihood": (
+        "loss neg_log_likelihood(trajectories: traj_set, distribution: dist, indices: index_list) =\n"
+        "    sliced = trajectories[:, indices];\n"
+        "    - sum( log( distribution.marg_pdf(sliced, indices) ) )\n"
+    ),
+    "signal_error": (
+        "loss signal_error(distribution: dist, target: scalar) =\n"
+        "    sum( (distribution.mean[range(0, 5)] - ones(range(0, 5)) * target) ^ 2 )\n"
+    ),
+}
+
+
 def get_loss(name: str, **kwargs: Any) -> LossFunction:
     if name not in LOSS_REGISTRY:
         logger.error("unknown loss name=%r; available=%s", name, sorted(LOSS_REGISTRY))
-        raise ValueError(f"Unknown loss name {name!r}. Available: {sorted(LOSS_REGISTRY)}")
+        raise ValueError(
+            f"Unknown loss name {name!r}. Available: {sorted(LOSS_REGISTRY)}"
+        )
     return LOSS_REGISTRY[name](**kwargs)
