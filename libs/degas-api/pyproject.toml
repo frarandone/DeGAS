@@ -10,6 +10,7 @@ dependencies = [
     "loguru>=0.7.3",
     "pydegas",
     "redis>=7.4.0",
+    "websockets>=16.0",
 ]
 
 [build-system]
