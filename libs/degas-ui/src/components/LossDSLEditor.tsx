@@ -101,9 +101,10 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   onValidate: (params: LossParamInfo[], errors: string[]) => void;
+  readOnly?: boolean;
 };
 
-export function LossDSLEditor({ theme, value, onChange, onValidate }: Props) {
+export function LossDSLEditor({ theme, value, onChange, onValidate, readOnly = false }: Props) {
   const monaco = useMonaco();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,15 +114,24 @@ export function LossDSLEditor({ theme, value, onChange, onValidate }: Props) {
     monaco.editor.setTheme(theme === "dark" ? "degas-loss-dark" : "degas-loss-light");
   }, [monaco, theme]);
 
-  function handleChange(val: string | undefined) {
-    const v = val ?? "";
-    onChange(v);
+  const onValidateRef = useRef(onValidate);
+  useEffect(() => {
+    onValidateRef.current = onValidate;
+  });
 
+  useEffect(() => {
+    if (readOnly) {
+      if (editorRef.current && monaco) {
+        const model = editorRef.current.getModel();
+        if (model) monaco.editor.setModelMarkers(model, "degas-loss", []);
+      }
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const result = await validateLossSource(v);
-        onValidate(result.params, result.errors);
+        const result = await validateLossSource(value);
+        onValidateRef.current(result.params, result.errors);
 
         if (editorRef.current && monaco) {
           const model = editorRef.current.getModel();
@@ -145,9 +155,17 @@ export function LossDSLEditor({ theme, value, onChange, onValidate }: Props) {
           }
         }
       } catch {
-        // network error — leave markers as-is
+        // network error - leave markers as-is
       }
     }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [value, readOnly, monaco]);
+
+  function handleChange(val: string | undefined) {
+    if (readOnly) return;
+    onChange(val ?? "");
   }
 
   const handleMount: OnMount = (editor) => {
@@ -164,6 +182,7 @@ export function LossDSLEditor({ theme, value, onChange, onValidate }: Props) {
       onMount={handleMount}
       beforeMount={registerLanguage}
       options={{
+        readOnly,
         fontSize: 13,
         lineHeight: 22,
         fontFamily: "Menlo, Consolas, 'Courier New', monospace",
