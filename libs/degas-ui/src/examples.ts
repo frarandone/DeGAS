@@ -7,6 +7,8 @@ export interface Example {
   n_steps: number;
   optimizer: string;
   optimizer_kwargs: Record<string, unknown>;
+  Kmax?: number | null;
+  pruning?: 'classic' | 'ranking' | 'kmeans';
 }
 
 export const EXAMPLES: Example[] = [
@@ -60,6 +62,8 @@ for i in range(30) {
     n_steps: 100,
     optimizer: "Adam",
     optimizer_kwargs: { lr: 0.2 },
+    Kmax: 300,
+    pruning: "kmeans",
   },
   {
     label: "Gearbox",
@@ -130,6 +134,8 @@ for i in range(21) {
     n_steps: 200,
     optimizer: "Adam",
     optimizer_kwargs: { lr: 0.3 },
+    Kmax: 300,
+    pruning: "kmeans",
   },
   {
     label: "PID",
@@ -166,14 +172,14 @@ ang[50] = currAng;`,
     n_steps: 500,
     optimizer: "Adam",
     optimizer_kwargs: { lr: 0.2 },
+    Kmax: 300,
+    pruning: "kmeans",
   },
   {
     label: "BouncingBall",
     program: `/* Bouncing ball — Chaudhuri & Solar-Lezama (2010).
  * Recover the spring/damping parameters _R and _C from an observed
- * height trajectory. Generate the trajectory CSV via:
- *   python scripts/generate_trajectories.py bouncing_ball
- * then upload it as the 'trajectories' input.
+ * height trajectory. 
  */
 
 array[36] H;
@@ -229,5 +235,7 @@ H[35] = currH;`,
     n_steps: 100,
     optimizer: "Adam",
     optimizer_kwargs: { lr: 0.8 },
+    Kmax: 300,
+    pruning: "kmeans",
   },
 ];
