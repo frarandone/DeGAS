@@ -1,27 +1,36 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import contextlib
 import logging
 import time
-from collections.abc import AsyncIterator
-from typing import Any, Literal, Union, get_args
+from typing import Any, Literal, get_args
 
 import torch
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel, Field, model_validator
 
 from pydegas.cfg.builder import from_text
 from pydegas.cfg.smoother import smooth
 from pydegas.exceptions import PyDeGASError
-from pydegas.optimize.losses import LOSS_PARAM_SCHEMA, LOSS_REGISTRY, get_loss
-from pydegas.optimize.runner import OPTIMIZER_REGISTRY, OptimizationRun, StepResult
+from pydegas.optimize.losses import (
+    LOSS_DSL_SOURCE,
+    LOSS_PARAM_SCHEMA,
+    LOSS_REGISTRY,
+    get_loss,
+)
+from pydegas.optimize.runner import OPTIMIZER_REGISTRY, OptimizationRun
 from pydegas.parse.preprocessor import compile_to_soga_text
 
 from degas_api.cache.process import OptimizationRateLimiter
 from degas_api.settings import app_settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +39,12 @@ router = APIRouter(
     tags=["optimization"],
 )
 
-
-def _sse_event(name: str, payload: dict[str, Any]) -> str:
-    return f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+# Sentinel returned by next(gen, ...) when the optimization generator is exhausted.
+_STEP_DONE = object()
 
 
 class LossValidateRequest(BaseModel):
-    source: str
+    source: str = Field(..., max_length=20_000)
 
 
 class LossParamInfo(BaseModel):
@@ -50,7 +58,7 @@ class LossValidateResponse(BaseModel):
 
 
 class OptimizationRequest(BaseModel):
-    program: str
+    program: str = Field(..., max_length=50_000)
     program_language: Literal["soga", "soga_highlevel"] = "soga"
     compile_seed: int | None = None
     smooth_eps: float | None = None
@@ -63,6 +71,7 @@ class OptimizationRequest(BaseModel):
 
     loss_source: str | None = Field(
         default=None,
+        max_length=20_000,
         description="DeGASLoss DSL source. When set, loss_function is ignored.",
     )
     loss_bindings: dict[str, Any] = Field(
@@ -111,100 +120,44 @@ class LossParamDef(BaseModel):
 class LossFunctionInfo(BaseModel):
     name: str
     params: list[LossParamDef]
-
-
-class DistSummary(BaseModel):
-    var_list: list[str]
-    mean: list[float]
-
-
-class StepOut(BaseModel):
-    step: int
-    loss: float
-    params: dict[str, float]
-    elapsed_ms: float = 0.0
-    dist: DistSummary | None = None
-
-
-class OptimizationResponse(BaseModel):
-    steps: list[StepOut]
-    converged: bool
-    final_params: dict[str, float]
-
-
-def _step_to_out(step: StepResult, *, include_dist: bool) -> StepOut:
-    dist_summary: DistSummary | None = None
-    if include_dist:
-        mean = step.dist.gm.mean().tolist()
-        dist_summary = DistSummary(
-            var_list=step.dist.var_list, mean=[float(x) for x in mean]
-        )
-    return StepOut(
-        step=step.step,
-        loss=step.loss,
-        params=step.params,
-        elapsed_ms=step.elapsed_ms,
-        dist=dist_summary,
+    definition: str | None = (
+        None  # DeGASLoss DSL source, for the editor preview/prefill
     )
 
 
-async def check_optimization_limits(
-    http_request: Request,
-    body: OptimizationRequest,
-) -> OptimizationRequest:
-    """Caller must release the acquired concurrency slot in a finally block."""
-    limits = app_settings.optimization_limits
+def _get_client_ip(conn: Request | WebSocket) -> str:
+    """Extract the real client IP from an HTTP request or WebSocket connection."""
+    real_ip = conn.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    forwarded_for = conn.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return conn.client.host if conn.client else "unknown"
 
-    if body.n_steps > limits.max_steps:
-        raise HTTPException(
-            status_code=422,
-            detail=f"n_steps={body.n_steps} exceeds maximum allowed value of {limits.max_steps}.",
-        )
-    if body.Kmax is not None and body.Kmax < limits.min_kmax:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Kmax={body.Kmax} is below the minimum of {limits.min_kmax}. "
-                "Set Kmax=null to disable pruning entirely."
-            ),
-        )
 
+async def check_validate_rate_limit(http_request: Request) -> None:
+    """Sliding-window rate limit for /loss/validate (no concurrency slot)."""
     limiter: OptimizationRateLimiter | None = getattr(
         http_request.app.state, "orl_limiter", None
     )
     if limiter is None:
-        return body
-
-    client_ip = http_request.client.host if http_request.client else "unknown"
-
+        return
+    client_ip = _get_client_ip(http_request)
     allowed, retry_after = await limiter.check_rate_limit(client_ip)
     if not allowed:
         raise HTTPException(
             status_code=429,
-            detail="Rate limit exceeded. Too many optimization requests from this address.",
+            detail="Rate limit exceeded. Too many requests from this address.",
             headers={"Retry-After": str(retry_after)},
         )
 
-    acquired = await limiter.try_acquire_slot()
-    if not acquired:
-        try:
-            await limiter.undo_rate_limit_entry(client_ip)
-        except Exception:
-            pass
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                f"Server at capacity. At most {limits.max_concurrent_runs} optimizations "
-                "can run simultaneously. Please retry shortly."
-            ),
-            headers={"Retry-After": "5"},
-        )
-
-    return body
-
 
 @router.post("/loss/validate", response_model=LossValidateResponse)
-def validate_loss_source(body: LossValidateRequest) -> LossValidateResponse:
+def validate_loss_source(
+    body: LossValidateRequest,
+    _: None = Depends(check_validate_rate_limit),
+) -> LossValidateResponse:
     from pydegas.optimize.dsl import extract_params, validate_loss
 
     errors = validate_loss(body.source)
@@ -221,6 +174,7 @@ def get_loss_functions() -> list[LossFunctionInfo]:
         LossFunctionInfo(
             name=name,
             params=[LossParamDef(**p) for p in LOSS_PARAM_SCHEMA.get(name, [])],
+            definition=LOSS_DSL_SOURCE.get(name),
         )
         for name in LOSS_REGISTRY
     ]
@@ -236,189 +190,308 @@ def get_pruning_strategies() -> list[str]:
     return list(get_args(OptimizationRequest.model_fields["pruning"].annotation))
 
 
-@router.post(
-    "/run",
-    response_model=None,
-)
-async def run_optimization(
-    http_request: Request,
-    stream: bool = Query(
-        default=False,
-        description="If true, stream steps as Server-Sent Events (text/event-stream).",
-    ),
-    body: OptimizationRequest = Depends(check_optimization_limits),
-) -> Union[OptimizationResponse, StreamingResponse]:
-    """Setup (compile, CFG, loss) runs before streaming starts — invalid input returns 422.
-    Mid-run failures yield ``event: error``."""
-    limiter: OptimizationRateLimiter | None = getattr(
-        http_request.app.state, "orl_limiter", None
-    )
+@router.websocket("/ws")
+async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to smaller functions to simplify
+    """Run an optimization over a WebSocket."""
+    await websocket.accept()
     limits = app_settings.optimization_limits
+    limiter: OptimizationRateLimiter | None = getattr(
+        websocket.app.state, "orl_limiter", None
+    )
+    # Per-connection tag (host:port, matching uvicorn's access log) to correlate
+    # all log lines for one socket. step_count is referenced in the finally.
+    peer = (
+        f"{websocket.client.host}:{websocket.client.port}"
+        if websocket.client
+        else "unknown"
+    )
+    step_count = 0
+    logger.info("ws[%s] connected", peer)
+
+    # validate request frame
+    try:
+        body = OptimizationRequest.model_validate(await websocket.receive_json())
+    except WebSocketDisconnect:
+        logger.info("ws[%s] disconnected before sending a request", peer)
+        return
+    except Exception as e:
+        logger.warning("ws[%s] invalid request: %s", peer, e)
+        await websocket.send_json(
+            {"type": "error", "kind": "setup_error", "detail": f"Invalid request: {e}"}
+        )
+        await websocket.close()
+        return
+
+    loss_desc = (
+        f"custom({len(body.loss_source)} chars)"
+        if body.loss_source
+        else body.loss_function
+    )
+    logger.info(
+        "ws[%s] request: lang=%s optimizer=%s loss=%s n_steps=%d Kmax=%s",
+        peer,
+        body.program_language,
+        body.optimizer,
+        loss_desc,
+        body.n_steps,
+        body.Kmax,
+    )
+
+    # --- admission: limits, rate limit, concurrency slot ---
+    if body.n_steps > limits.max_steps:
+        logger.warning(
+            "ws[%s] rejected: n_steps=%d exceeds max %d",
+            peer,
+            body.n_steps,
+            limits.max_steps,
+        )
+        await websocket.send_json(
+            {
+                "type": "error",
+                "kind": "setup_error",
+                "detail": f"n_steps={body.n_steps} exceeds the maximum of {limits.max_steps}.",
+            }
+        )
+        await websocket.close()
+        return
+    if body.Kmax is not None and body.Kmax < limits.min_kmax:
+        logger.warning(
+            "ws[%s] rejected: Kmax=%s below min %d", peer, body.Kmax, limits.min_kmax
+        )
+        await websocket.send_json(
+            {
+                "type": "error",
+                "kind": "setup_error",
+                "detail": f"Kmax={body.Kmax} is below the minimum of {limits.min_kmax}. Set Kmax=null to disable pruning.",
+            }
+        )
+        await websocket.close()
+        return
+
+    acquired = False
+    if limiter is not None:
+        client_ip = _get_client_ip(websocket)
+        allowed, _retry = await limiter.check_rate_limit(client_ip)
+        if not allowed:
+            logger.warning("ws[%s] rejected: rate limited (ip=%s)", peer, client_ip)
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "kind": "rate_limited",
+                    "detail": "Too many optimization requests from this address.",
+                }
+            )
+            await websocket.close()
+            return
+        if not await limiter.try_acquire_slot():
+            logger.warning(
+                "ws[%s] rejected: server at capacity (max %d)",
+                peer,
+                limits.max_concurrent_runs,
+            )
+            with contextlib.suppress(Exception):
+                await limiter.undo_rate_limit_entry(client_ip)
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "kind": "at_capacity",
+                    "detail": f"Server at capacity ({limits.max_concurrent_runs} concurrent runs). Please retry shortly.",
+                }
+            )
+            await websocket.close()
+            return
+        acquired = True
+        logger.info("ws[%s] concurrency slot acquired", peer)
 
     try:
-        program = body.program
-        if body.program_language == "soga_highlevel":
-            program = compile_to_soga_text(program, seed=body.compile_seed)
-
-        cfg = from_text(program)
-        smooth(
-            cfg, smooth_eps=body.smooth_eps
-        ) if body.smooth_eps is not None else smooth(cfg)
-
-        if body.loss_source:
-            from pydegas.optimize.dsl import compile_loss, extract_params
-
-            params_info = extract_params(body.loss_source)
-            coerced: dict[str, Any] = {}
-            for p in params_info:
-                name, type_ann = p["name"], p["type"]
-                raw = body.loss_bindings.get(name)
-                if raw is None:
-                    continue
-                if type_ann == "traj_set":
-                    if not isinstance(raw, list):
-                        raise ValueError(f"binding '{name}' must be a 2-D array.")
-                    if len(raw) > limits.max_trajectory_rows:
-                        raise ValueError(
-                            f"binding '{name}': {len(raw)} rows exceeds maximum {limits.max_trajectory_rows}."
-                        )
-                    if raw and len(raw[0]) > limits.max_trajectory_cols:
-                        raise ValueError(
-                            f"binding '{name}': {len(raw[0])} columns exceeds maximum {limits.max_trajectory_cols}."
-                        )
-                    coerced[name] = torch.tensor(raw, dtype=torch.float64)
-                elif type_ann == "index_list":
-                    coerced[name] = [int(x) for x in raw]
-                elif type_ann == "scalar":
-                    coerced[name] = torch.tensor(float(raw), dtype=torch.float64)
-                elif type_ann == "int":
-                    coerced[name] = int(raw)
-                else:
-                    coerced[name] = raw
-            loss_fn = compile_loss(body.loss_source, **coerced)
-        else:
-            loss_kwargs = dict(body.loss_kwargs)
-            if "trajectories" in loss_kwargs and not isinstance(
-                loss_kwargs["trajectories"], torch.Tensor
-            ):
-                raw = loss_kwargs["trajectories"]
-                if not isinstance(raw, list):
-                    raise ValueError("trajectories must be a list of rows.")
-                if len(raw) > limits.max_trajectory_rows:
-                    raise ValueError(
-                        f"trajectories has {len(raw)} rows; maximum is {limits.max_trajectory_rows}."
-                    )
-                if raw and len(raw[0]) > limits.max_trajectory_cols:
-                    raise ValueError(
-                        f"trajectories has {len(raw[0])} columns; maximum is {limits.max_trajectory_cols}."
-                    )
-                loss_kwargs["trajectories"] = torch.tensor(raw, dtype=torch.float64)
-            loss_fn = get_loss(body.loss_function, **loss_kwargs)
-
-        optimizer_kwargs = dict(body.optimizer_kwargs) if body.optimizer_kwargs else {}
-        if body.optimizer == "LBFGS":
-            optimizer_kwargs["max_iter"] = min(optimizer_kwargs.get("max_iter", 20), 20)
-
-        run = OptimizationRun(
-            cfg=cfg,
-            initial_params=body.initial_params,
-            loss_fn=loss_fn,
-            optimizer=body.optimizer,
-            optimizer_kwargs=optimizer_kwargs or None,
-            Kmax=body.Kmax,
-            pruning=body.pruning,
-            tolerance=body.tolerance,
-            patience=body.patience,
-        )
-    except (ValueError, PyDeGASError) as e:
-        if limiter is not None:
-            await limiter.release_slot()
-        raise HTTPException(status_code=422, detail=str(e)) from e
-
-    max_seconds = limits.max_run_seconds
-
-    if not stream:
+        # --- setup (compile, CFG, loss, run); invalid input -> setup_error ---
         try:
-            loop = asyncio.get_running_loop()
-            out_steps: list[StepOut] = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: [
-                        _step_to_out(s, include_dist=body.return_dist_summary)
-                        for s in run.run_generator(body.n_steps)
-                    ],
-                ),
-                timeout=max_seconds,
+            program = body.program
+            if body.program_language == "soga_highlevel":
+                program = compile_to_soga_text(program, seed=body.compile_seed)
+            cfg = from_text(program)
+            (
+                smooth(cfg, smooth_eps=body.smooth_eps)
+                if body.smooth_eps is not None
+                else smooth(cfg)
             )
-        except asyncio.TimeoutError:
-            raise HTTPException(
-                status_code=408,
-                detail=f"Optimization timed out after {max_seconds}s.",
+
+            if body.loss_source:
+                from pydegas.optimize.dsl import compile_loss, extract_params
+
+                coerced: dict[str, Any] = {}
+                for p in extract_params(body.loss_source):
+                    name, type_ann = p["name"], p["type"]
+                    raw = body.loss_bindings.get(name)
+                    if raw is None:
+                        continue
+                    if type_ann == "traj_set":
+                        if not isinstance(raw, list):
+                            raise ValueError(f"binding '{name}' must be a 2-D array.")
+                        if len(raw) > limits.max_trajectory_rows or (
+                            raw and len(raw[0]) > limits.max_trajectory_cols
+                        ):
+                            raise ValueError(
+                                f"binding '{name}' exceeds the trajectory size limits."
+                            )
+                        coerced[name] = torch.tensor(raw, dtype=torch.float64)
+                    elif type_ann == "index_list":
+                        coerced[name] = [int(x) for x in raw]
+                    elif type_ann == "scalar":
+                        coerced[name] = torch.tensor(float(raw), dtype=torch.float64)
+                    elif type_ann == "int":
+                        coerced[name] = int(raw)
+                    else:
+                        coerced[name] = raw
+                loss_fn = compile_loss(body.loss_source, **coerced)
+            else:
+                loss_kwargs = dict(body.loss_kwargs)
+                raw = loss_kwargs.get("trajectories")
+                if isinstance(raw, list):
+                    if len(raw) > limits.max_trajectory_rows or (
+                        raw and len(raw[0]) > limits.max_trajectory_cols
+                    ):
+                        raise ValueError(
+                            "trajectories exceeds the trajectory size limits."
+                        )
+                    loss_kwargs["trajectories"] = torch.tensor(raw, dtype=torch.float64)
+                loss_fn = get_loss(body.loss_function, **loss_kwargs)
+
+            optimizer_kwargs = (
+                dict(body.optimizer_kwargs) if body.optimizer_kwargs else {}
             )
-        finally:
-            if limiter is not None:
-                await limiter.release_slot()
+            if body.optimizer == "LBFGS":
+                optimizer_kwargs["max_iter"] = min(
+                    optimizer_kwargs.get("max_iter", 20), 20
+                )
 
-        final = out_steps[-1] if out_steps else None
-        return OptimizationResponse(
-            steps=out_steps,
-            converged=run.has_converged(),
-            final_params=final.params if final else dict(body.initial_params),
-        )
+            run = OptimizationRun(
+                cfg=cfg,
+                initial_params=body.initial_params,
+                loss_fn=loss_fn,
+                optimizer=body.optimizer,
+                optimizer_kwargs=optimizer_kwargs or None,
+                Kmax=body.Kmax,
+                pruning=body.pruning,
+                tolerance=body.tolerance,
+                patience=body.patience,
+            )
+        except (ValueError, PyDeGASError) as e:
+            logger.warning("ws[%s] setup error: %s", peer, e)
+            await websocket.send_json(
+                {"type": "error", "kind": "setup_error", "detail": str(e)}
+            )
+            return
 
-    _limiter = limiter
-    _request = http_request
-    _loop = asyncio.get_running_loop()
-    _sentinel = object()
-
-    async def _iter_events() -> AsyncIterator[str]:
-        # Starlette calls aclose() on disconnect, firing the finally block immediately.
+        # run: stream steps; stop / total-timeout honoured between steps # TODO: run in a thread to allow mid-step stop / timeout
+        await websocket.send_json({"type": "start", "n_steps": body.n_steps})
+        logger.info("ws[%s] run started (%d steps)", peer, body.n_steps)
+        loop = asyncio.get_running_loop()
+        # Any client frame (or disconnect) signals "stop"; created once and reused.
+        stop_task = asyncio.ensure_future(websocket.receive_text())
+        deadline = time.monotonic() + limits.max_run_seconds
+        run_start = time.monotonic()
+        gen = run.run_generator(body.n_steps)
+        final_params = dict(body.initial_params)
+        outcome = "not_converged"
         try:
-            yield _sse_event("start", {"n_steps": body.n_steps})
-
-            last_out: StepOut | None = None
-            gen = run.run_generator(body.n_steps)
-            deadline = time.monotonic() + max_seconds
-
             while True:
-                if await _request.is_disconnected():
-                    logger.debug("client disconnected — stopping optimization stream")
-                    return
+                step_task = loop.run_in_executor(None, next, gen, _STEP_DONE)
+                done, _pending = await asyncio.wait(
+                    {step_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+                )
 
-                if time.monotonic() > deadline:
-                    logger.warning(
-                        "optimization stream timed out after {}s", max_seconds
-                    )
-                    yield _sse_event(
-                        "error",
-                        {"detail": f"Optimization timed out after {max_seconds}s."},
-                    )
-                    return
-
-                try:
-                    step = await _loop.run_in_executor(None, next, gen, _sentinel)
-                except Exception as e:
-                    logger.exception("error during optimization stream")
-                    yield _sse_event("error", {"detail": str(e)})
-                    return
-
-                if step is _sentinel:
+                if stop_task in done:
+                    # Leave the in-flight step running (a thread can't be killed); just
+                    # don't start the next one. Retrieve its result later to avoid a warning.
+                    step_task.add_done_callback(lambda f: f.exception())
+                    try:
+                        stop_task.result()
+                        outcome = "stopped"
+                        logger.info(
+                            "ws[%s] stop requested by client after %d steps",
+                            peer,
+                            step_count,
+                        )
+                    except WebSocketDisconnect:
+                        outcome = "connection_lost"
+                        logger.info(
+                            "ws[%s] client disconnected mid-run after %d steps",
+                            peer,
+                            step_count,
+                        )
                     break
 
-                last_out = _step_to_out(step, include_dist=body.return_dist_summary)
-                yield _sse_event("step", last_out.model_dump())
+                step = step_task.result()  # may raise a compute error (e.g. NaN scale)
+                if step is _STEP_DONE:
+                    outcome = "converged" if run.has_converged() else "not_converged"
+                    break
 
-            yield _sse_event(
-                "end",
-                {
-                    "converged": run.has_converged(),
-                    "final_params": last_out.params
-                    if last_out
-                    else dict(body.initial_params),
-                },
-            )
+                final_params = step.params
+                dist = None
+                if body.return_dist_summary:
+                    dist = {
+                        "var_list": step.dist.var_list,
+                        "mean": [float(x) for x in step.dist.gm.mean().tolist()],
+                    }
+                await websocket.send_json(
+                    {
+                        "type": "step",
+                        "step": step.step,
+                        "loss": step.loss,
+                        "params": step.params,
+                        "elapsed_ms": step.elapsed_ms,
+                        "dist": dist,
+                    }
+                )
+                step_count += 1
+                logger.debug(
+                    "ws[%s] step %d loss=%.6g (%.0fms)",
+                    peer,
+                    step.step,
+                    step.loss,
+                    step.elapsed_ms,
+                )
+
+                if time.monotonic() > deadline:
+                    outcome = "run_timeout"
+                    logger.info(
+                        "ws[%s] total run timeout after %d steps", peer, step_count
+                    )
+                    break
         finally:
-            if _limiter is not None:
-                await _limiter.release_slot()
+            stop_task.cancel()
 
-    return StreamingResponse(_iter_events(), media_type="text/event-stream")
+        logger.info(
+            "ws[%s] run finished: outcome=%s steps=%d elapsed=%.1fs",
+            peer,
+            outcome,
+            step_count,
+            time.monotonic() - run_start,
+        )
+        if outcome != "connection_lost":
+            await websocket.send_json(
+                {
+                    "type": "end",
+                    "outcome": outcome,
+                    "converged": run.has_converged(),
+                    "final_params": final_params,
+                }
+            )
+    except WebSocketDisconnect:
+        logger.info("ws[%s] client disconnected after %d steps", peer, step_count)
+    except (
+        Exception
+    ) as e:  # mid-run compute/runtime failure (NaN scale, singular matrix, …)
+        logger.exception("ws[%s] compute error after %d steps", peer, step_count)
+        with contextlib.suppress(Exception):
+            await websocket.send_json(
+                {"type": "error", "kind": "compute_error", "detail": str(e)}
+            )
+    finally:
+        if acquired and limiter is not None:
+            await limiter.release_slot()
+            logger.info("ws[%s] concurrency slot released", peer)
+        with contextlib.suppress(Exception):
+            await websocket.close()
+        logger.info("ws[%s] handler closed", peer)
