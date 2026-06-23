@@ -20,12 +20,12 @@ class RedisRateLimiterSettings(BaseSettings):
 
 
 class OptimizationLimitsSettings(BaseSettings):
-    max_concurrent_runs: int = 5
+    max_concurrent_runs: int = 2
     max_steps: int = 500
     rate_limit_requests: int = 20
     rate_limit_window_seconds: int = 60
-    min_kmax: int = 15
-    max_run_seconds: int = 120  # wall-clock timeout per optimization run
+    min_kmax: int = 200
+    max_run_seconds: int = 300  # wall-clock timeout per optimization run
     max_trajectory_rows: int = 500  # rows in uploaded trajectory CSV
     max_trajectory_cols: int = 200  # columns (time steps) per trajectory
 
@@ -33,11 +33,12 @@ class OptimizationLimitsSettings(BaseSettings):
 class AppSettings(BaseSettings):
     """main application settings with hierarchical configuration."""
 
-    host: str
-    port: int
-    workers: int
+    host: str = "0.0.0.0"
+    port: int = 8000
 
     docs_url: str = "/docs"
+    static_dir: str | None = None
+    allowed_hosts: list[str] = ["*"]
 
     logging: LoggingSettings = LoggingSettings()
     optimization_rate_limiter: RedisRateLimiterSettings = RedisRateLimiterSettings()

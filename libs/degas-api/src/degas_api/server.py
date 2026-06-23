@@ -1,11 +1,14 @@
 import time
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette import status
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from loguru import logger
 
@@ -14,7 +17,6 @@ from degas_api.settings import app_settings
 from degas_api.log_config import configure_logging
 from degas_api.routers import api_router
 from degas_api.lifespan import create_lifespan
-
 
 type AppLifespan = Callable[[FastAPI], AbstractAsyncContextManager[Any]]
 
@@ -60,6 +62,14 @@ def create_app(
             media_type="application/json; charset=utf-8",
         )
 
+    # Reject requests whose Host header isn't in the allowlist.
+    # Must be added before other middleware so scanners are dropped early.
+    if app_settings.allowed_hosts != ["*"]:
+        app.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=app_settings.allowed_hosts,
+        )
+
     app.middleware("http")(middlewares.logging_context_middleware())
     app.middleware("http")(middlewares.add_request_id_header)
     app.middleware("http")(middlewares.api_version_middleware(__version__))
@@ -82,9 +92,24 @@ def create_app(
             "max_concurrent": max_concurrent,
         }
 
-    @app.get("/", tags=["root"])
-    async def redirect_to_docs_root():
-        logger.debug("Redirecting to docs")
-        return RedirectResponse(url=docs_url)
+    static_dir = Path(app_settings.static_dir) if app_settings.static_dir else None
+    if static_dir is not None and static_dir.exists():
+        assets_dir = static_dir / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="spa-assets")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str) -> FileResponse:
+            file_path = static_dir / full_path
+            if file_path.is_file():
+                return FileResponse(file_path)
+            return FileResponse(static_dir / "index.html")
+
+    else:
+
+        @app.get("/", tags=["root"])
+        async def redirect_to_docs_root():
+            logger.debug("Redirecting to docs")
+            return RedirectResponse(url=docs_url)
 
     return app
