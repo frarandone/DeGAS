@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
+from loguru import logger
 import time
 from typing import Any, Literal, get_args
 
@@ -31,8 +31,6 @@ from pydegas.parse.preprocessor import compile_to_soga_text
 
 from degas_api.cache.process import OptimizationRateLimiter
 from degas_api.settings import app_settings
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/optimization",
@@ -191,7 +189,9 @@ def get_pruning_strategies() -> list[str]:
 
 
 @router.websocket("/ws")
-async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to smaller functions to simplify
+async def ws_optimization(
+    websocket: WebSocket,
+) -> None:  # TODO: break up to smaller functions to simplify
     """Run an optimization over a WebSocket."""
     await websocket.accept()
     limits = app_settings.optimization_limits
@@ -206,16 +206,16 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
         else "unknown"
     )
     step_count = 0
-    logger.info("ws[%s] connected", peer)
+    logger.info("ws[{peer}] connected", peer=peer)
 
     # validate request frame
     try:
         body = OptimizationRequest.model_validate(await websocket.receive_json())
     except WebSocketDisconnect:
-        logger.info("ws[%s] disconnected before sending a request", peer)
+        logger.info("ws[{peer}] disconnected before sending a request", peer=peer)
         return
     except Exception as e:
-        logger.warning("ws[%s] invalid request: %s", peer, e)
+        logger.warning("ws[{peer}] invalid request: {err}", peer=peer, err=e)
         await websocket.send_json(
             {"type": "error", "kind": "setup_error", "detail": f"Invalid request: {e}"}
         )
@@ -228,22 +228,22 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
         else body.loss_function
     )
     logger.info(
-        "ws[%s] request: lang=%s optimizer=%s loss=%s n_steps=%d Kmax=%s",
-        peer,
-        body.program_language,
-        body.optimizer,
-        loss_desc,
-        body.n_steps,
-        body.Kmax,
+        "ws[{peer}] request: lang={lang} optimizer={optimizer} loss={loss} n_steps={n_steps} Kmax={kmax}",
+        peer=peer,
+        lang=body.program_language,
+        optimizer=body.optimizer,
+        loss=loss_desc,
+        n_steps=body.n_steps,
+        kmax=body.Kmax,
     )
 
     # --- admission: limits, rate limit, concurrency slot ---
     if body.n_steps > limits.max_steps:
         logger.warning(
-            "ws[%s] rejected: n_steps=%d exceeds max %d",
-            peer,
-            body.n_steps,
-            limits.max_steps,
+            "ws[{peer}] rejected: n_steps={n_steps} exceeds max {max_steps}",
+            peer=peer,
+            n_steps=body.n_steps,
+            max_steps=limits.max_steps,
         )
         await websocket.send_json(
             {
@@ -254,15 +254,18 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
         )
         await websocket.close()
         return
-    if body.Kmax is not None and body.Kmax < limits.min_kmax:
+    if body.Kmax is not None and body.Kmax >= limits.max_kmax:
         logger.warning(
-            "ws[%s] rejected: Kmax=%s below min %d", peer, body.Kmax, limits.min_kmax
+            "ws[{peer}] rejected: Kmax={kmax} below min {max_kmax}",
+            peer=peer,
+            kmax=body.Kmax,
+            max_kmax=limits.max_kmax,
         )
         await websocket.send_json(
             {
                 "type": "error",
                 "kind": "setup_error",
-                "detail": f"Kmax={body.Kmax} is below the minimum of {limits.min_kmax}. Set Kmax=null to disable pruning.",
+                "detail": f"Kmax={body.Kmax} is below the minimum of {limits.max_kmax}. Set Kmax=null to disable pruning.",
             }
         )
         await websocket.close()
@@ -273,7 +276,7 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
         client_ip = _get_client_ip(websocket)
         allowed, _retry = await limiter.check_rate_limit(client_ip)
         if not allowed:
-            logger.warning("ws[%s] rejected: rate limited (ip=%s)", peer, client_ip)
+            logger.warning("ws[{peer}] rejected: rate limited (ip={ip})", peer=peer, ip=client_ip)
             await websocket.send_json(
                 {
                     "type": "error",
@@ -285,9 +288,9 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
             return
         if not await limiter.try_acquire_slot():
             logger.warning(
-                "ws[%s] rejected: server at capacity (max %d)",
-                peer,
-                limits.max_concurrent_runs,
+                "ws[{peer}] rejected: server at capacity (max {max})",
+                peer=peer,
+                max=limits.max_concurrent_runs,
             )
             with contextlib.suppress(Exception):
                 await limiter.undo_rate_limit_entry(client_ip)
@@ -301,7 +304,7 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
             await websocket.close()
             return
         acquired = True
-        logger.info("ws[%s] concurrency slot acquired", peer)
+        logger.info("ws[{peer}] concurrency slot acquired", peer=peer)
 
     try:
         # --- setup (compile, CFG, loss, run); invalid input -> setup_error ---
@@ -377,7 +380,7 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
                 patience=body.patience,
             )
         except (ValueError, PyDeGASError) as e:
-            logger.warning("ws[%s] setup error: %s", peer, e)
+            logger.warning("ws[{peer}] setup error: {err}", peer=peer, err=e)
             await websocket.send_json(
                 {"type": "error", "kind": "setup_error", "detail": str(e)}
             )
@@ -385,7 +388,7 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
 
         # run: stream steps; stop / total-timeout honoured between steps # TODO: run in a thread to allow mid-step stop / timeout
         await websocket.send_json({"type": "start", "n_steps": body.n_steps})
-        logger.info("ws[%s] run started (%d steps)", peer, body.n_steps)
+        logger.info("ws[{peer}] run started ({n_steps} steps)", peer=peer, n_steps=body.n_steps)
         loop = asyncio.get_running_loop()
         # Any client frame (or disconnect) signals "stop"; created once and reused.
         stop_task = asyncio.ensure_future(websocket.receive_text())
@@ -409,16 +412,16 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
                         stop_task.result()
                         outcome = "stopped"
                         logger.info(
-                            "ws[%s] stop requested by client after %d steps",
-                            peer,
-                            step_count,
+                            "ws[{peer}] stop requested by client after {steps} steps",
+                            peer=peer,
+                            steps=step_count,
                         )
                     except WebSocketDisconnect:
                         outcome = "connection_lost"
                         logger.info(
-                            "ws[%s] client disconnected mid-run after %d steps",
-                            peer,
-                            step_count,
+                            "ws[{peer}] client disconnected mid-run after {steps} steps",
+                            peer=peer,
+                            steps=step_count,
                         )
                     break
 
@@ -446,28 +449,30 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
                 )
                 step_count += 1
                 logger.debug(
-                    "ws[%s] step %d loss=%.6g (%.0fms)",
-                    peer,
-                    step.step,
-                    step.loss,
-                    step.elapsed_ms,
+                    "ws[{peer}] step {step} loss={loss:.6g} ({elapsed:.0f}ms)",
+                    peer=peer,
+                    step=step.step,
+                    loss=step.loss,
+                    elapsed=step.elapsed_ms,
                 )
 
                 if time.monotonic() > deadline:
                     outcome = "run_timeout"
                     logger.info(
-                        "ws[%s] total run timeout after %d steps", peer, step_count
+                        "ws[{peer}] total run timeout after {steps} steps",
+                        peer=peer,
+                        steps=step_count,
                     )
                     break
         finally:
             stop_task.cancel()
 
         logger.info(
-            "ws[%s] run finished: outcome=%s steps=%d elapsed=%.1fs",
-            peer,
-            outcome,
-            step_count,
-            time.monotonic() - run_start,
+            "ws[{peer}] run finished: outcome={outcome} steps={steps} elapsed={elapsed:.1f}s",
+            peer=peer,
+            outcome=outcome,
+            steps=step_count,
+            elapsed=time.monotonic() - run_start,
         )
         if outcome != "connection_lost":
             await websocket.send_json(
@@ -479,11 +484,11 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
                 }
             )
     except WebSocketDisconnect:
-        logger.info("ws[%s] client disconnected after %d steps", peer, step_count)
+        logger.info("ws[{peer}] client disconnected after {steps} steps", peer=peer, steps=step_count)
     except (
         Exception
     ) as e:  # mid-run compute/runtime failure (NaN scale, singular matrix, …)
-        logger.exception("ws[%s] compute error after %d steps", peer, step_count)
+        logger.exception("ws[{peer}] compute error after {steps} steps", peer=peer, steps=step_count)
         with contextlib.suppress(Exception):
             await websocket.send_json(
                 {"type": "error", "kind": "compute_error", "detail": str(e)}
@@ -491,7 +496,7 @@ async def ws_optimization(websocket: WebSocket) -> None: # TODO: break up to sma
     finally:
         if acquired and limiter is not None:
             await limiter.release_slot()
-            logger.info("ws[%s] concurrency slot released", peer)
+            logger.info("ws[{peer}] concurrency slot released", peer=peer)
         with contextlib.suppress(Exception):
             await websocket.close()
-        logger.info("ws[%s] handler closed", peer)
+        logger.info("ws[{peer}] handler closed", peer=peer)

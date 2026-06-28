@@ -24,7 +24,7 @@ class OptimizationLimitsSettings(BaseSettings):
     max_steps: int = 500
     rate_limit_requests: int = 20
     rate_limit_window_seconds: int = 60
-    min_kmax: int = 200
+    max_kmax: int = 100
     max_run_seconds: int = 300  # wall-clock timeout per optimization run
     max_trajectory_rows: int = 500  # rows in uploaded trajectory CSV
     max_trajectory_cols: int = 200  # columns (time steps) per trajectory
@@ -39,6 +39,10 @@ class AppSettings(BaseSettings):
     docs_url: str = "/docs"
     static_dir: str | None = None
     allowed_hosts: list[str] = ["*"]
+
+    db_path: str = "degas_sessions.db"
+    session_ttl_days: int = 1
+    session_cleanup_interval_hours: int = 6
 
     logging: LoggingSettings = LoggingSettings()
     optimization_rate_limiter: RedisRateLimiterSettings = RedisRateLimiterSettings()

@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import torch
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from degas_api.settings import app_settings
 from loguru import logger
@@ -17,6 +19,40 @@ def create_lifespan(host: str, port: int):
 
         torch.set_default_dtype(torch.float64)
         logger.info(startup_message(host=host, port=port))
+
+        from degas_api.db import get_engine, init_db
+        from degas_api.models.session import OptimizationSession
+        from sqlmodel import Session, delete
+
+        init_db(app_settings.db_path)
+        logger.info(
+            "session database initialised at {db_path}",
+            db_path=app_settings.db_path,
+        )
+
+        def _cleanup_expired_sessions() -> None:
+            with Session(get_engine()) as db:
+                result = db.exec(
+                    delete(OptimizationSession).where(
+                        OptimizationSession.expires_at
+                        < datetime.now(timezone.utc).replace(tzinfo=None)
+                    )
+                )
+                db.commit()
+                if result.rowcount:
+                    logger.info(
+                        "cleaned up {row_count} expired session(s)",
+                        row_count=result.rowcount,
+                    )
+
+        cleanup_hours = app_settings.session_cleanup_interval_hours
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(_cleanup_expired_sessions, "interval", hours=cleanup_hours)
+        scheduler.start()
+        logger.info(
+            "session cleanup scheduler started (interval={cleanup_hours}h)",
+            cleanup_hours=cleanup_hours,
+        )
 
         orl = app_settings.optimization_rate_limiter
         limits = app_settings.optimization_limits
@@ -57,12 +93,12 @@ def create_lifespan(host: str, port: int):
                     "optimization rate limiter initialized: "
                     "max_concurrent={max_concurrent} "
                     "rate_limit={rate}/{window}s "
-                    "max_steps={max_steps} min_kmax={min_kmax}",
+                    "max_steps={max_steps} max_kmax={max_kmax}",
                     max_concurrent=limits.max_concurrent_runs,
                     rate=limits.rate_limit_requests,
                     window=limits.rate_limit_window_seconds,
                     max_steps=limits.max_steps,
-                    min_kmax=limits.min_kmax,
+                    max_kmax=limits.max_kmax,
                 )
             except RedisConnectionError as e:
                 logger.exception(
@@ -74,6 +110,7 @@ def create_lifespan(host: str, port: int):
             yield
         finally:
             logger.info("shutting down the DeGAS API server...")
+            scheduler.shutdown(wait=False)
 
             if app.state.orl_redis:
                 await app.state.orl_redis.close()
