@@ -10,6 +10,7 @@ export interface LossParamDef {
 export interface LossFunctionInfo {
   name: string
   params: LossParamDef[]
+  definition?: string | null
 }
 
 export interface StepOut {
@@ -49,6 +50,21 @@ export interface OptimizationRequest {
   return_dist_summary: boolean
   tolerance?: number | null
   patience?: number
+  smooth_eps?: number | null
+  pruning?: 'classic' | 'ranking' | 'kmeans'
 }
 
 export type RunStatus = 'idle' | 'running' | 'done' | 'error'
+
+// Terminal outcome of a run that produced results (sent on the `end` frame).
+// See docs/feedback-2026-06/08-run-outcome/taxonomy.md.
+export type RunOutcome = 'converged' | 'not_converged' | 'stopped' | 'run_timeout'
+
+// Failure modes (sent on the `error` frame, or derived client-side for a
+// dropped socket), each rendered with a distinct message.
+export type RunErrorKind =
+  | 'setup_error'
+  | 'compute_error'
+  | 'rate_limited'
+  | 'at_capacity'
+  | 'connection_lost'

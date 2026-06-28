@@ -20,7 +20,6 @@ export interface ExportBundle {
     tolerance: number | null;
     patience: number | null;
     smooth_eps: number | null;
-    Kmax: number | null;
     pruning?: string;
     initial_params: Record<string, number>;
     loss:
@@ -28,7 +27,7 @@ export interface ExportBundle {
       | { mode: "custom"; source: string; bindings: Record<string, unknown> };
   };
   final_params: Record<string, number>;
-  steps: StepOut[];
+  steps: Omit<StepOut, "dist">[];
 }
 
 export function buildExportBundle(args: {
@@ -74,13 +73,17 @@ export function buildExportBundle(args: {
       tolerance: request.tolerance ?? null,
       patience: request.patience ?? null,
       smooth_eps: request.smooth_eps ?? null,
-      Kmax: request.Kmax ?? null,
       pruning: request.pruning,
       initial_params: request.initial_params,
       loss,
     },
     final_params: finalParams,
-    steps,
+    steps: steps.map(({ step, loss: stepLoss, params, elapsed_ms }) => ({
+      step,
+      loss: stepLoss,
+      params,
+      elapsed_ms,
+    })),
   };
 }
 

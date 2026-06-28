@@ -42,11 +42,55 @@ const LABEL: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const GROUP_LABEL: React.CSSProperties = {
+  fontSize: 10,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  fontWeight: 600,
+  color: "var(--text-muted)",
+  whiteSpace: "nowrap",
+  minWidth: 96,
+};
+
 const ROW: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
+};
+
+const TIP = {
+  optimizer:
+    "torch.optim optimizer used to update the parameters each step (Adam, AdamW, SGD, RMSprop, Adagrad, LBFGS). ",
+  lr: "Learning rate handed to the torch optimizer.",
+  steps:
+    "Maximum number of gradient-descent steps. Each step recomputes the output distribution, evaluates the loss, and updates the parameters; the run stops early if it converges.",
+  tol: "Convergence threshold on loss change: the run is flagged converged when the loss moves by less than this between every step in the patience window. Empty disables early stopping.",
+  patience:
+    "Number of consecutive steps whose loss must stay within tol before the run is flagged converged.",
+  smoothEps:
+    "Smoothing width applied by smooth() to conditional branches so gradients can flow through them.",
+  loss: "Objective minimized over the program's output distribution. Switch to 'custom' to view/edit each definition in the loss editor.",
+  initialParam:
+    "Initial value of this optimized parameter. Each _par becomes a grad-tracked tensor the optimizer updates from this starting point.",
+};
+
+const LOSS_ARG_TIP: Record<string, string> = {
+  trajectories:
+    "Observed trajectory data (CSV): one row per trajectory, columns selected by 'indices'. Compared against the model's output marginals.",
+  indices:
+    "Indices of the output variables to score against the data (0-based). Auto-filled from the uploaded CSV's columns.",
+  target:
+    "Constant value the output mean trace is driven toward (signal_error).",
+  time_steps:
+    "Number of time steps signal_error sums over (indices 1…time_steps-1). Must not exceed the program's variable count.",
+};
+
+const DSL_TYPE_TIP: Record<string, string> = {
+  traj_set: "Trajectory matrix (CSV) bound to this traj_set parameter.",
+  index_list: "Comma-separated integer indices bound to this index_list parameter.",
+  scalar: "Scalar value bound to this parameter.",
+  int: "Integer value bound to this parameter.",
 };
 
 interface CsvUploadProps {
@@ -131,6 +175,8 @@ interface Props {
   program: string;
   lossMode: LossMode;
   lossSource: string;
+  lossName: string;
+  onLossNameChange: (name: string) => void;
   dslParams: LossParamInfo[];
   dslErrors: string[];
   onLossModeChange: (mode: LossMode) => void;
@@ -146,6 +192,8 @@ export function Toolbar({
   program,
   lossMode,
   lossSource,
+  lossName,
+  onLossNameChange,
   dslParams,
   dslErrors,
   onLossModeChange,
@@ -160,7 +208,6 @@ export function Toolbar({
 
   const [selectedExample, setSelectedExample] = useState(firstExample.label);
   const [optimizer, setOptimizer] = useState(firstExample.optimizer);
-  const [lossName, setLossName] = useState(firstExample.loss_function);
   const [lossKwargs, setLossKwargs] = useState<Record<string, string>>(
     Object.fromEntries(
       Object.entries(firstExample.loss_kwargs).map(([k, v]) => [k, String(v)]),
@@ -178,17 +225,16 @@ export function Toolbar({
   const [lr, setLr] = useState("0.2");
   const [tolerance, setTolerance] = useState("1e-8");
   const [patience, setPatience] = useState("30");
+  const [smoothEps, setSmoothEps] = useState("0.001");
 
   // shape of the most recently uploaded trajectory, keyed by param name
   const [trajShapes, setTrajShapes] = useState<
     Record<string, [number, number]>
   >({});
 
-  // DSL binding values (stored as strings; traj_set stored as JSON string of number[][])
   const [dslBindings, setDslBindings] = useState<Record<string, string>>({});
   const [dslTrajShapes, setDslTrajShapes] = useState<Record<string, [number, number]>>({});
 
-  // Sync param inputs when program changes (conditional setState during render).
   const [lastProgram, setLastProgram] = useState(program);
   if (program !== lastProgram) {
     setLastProgram(program);
@@ -210,7 +256,7 @@ export function Toolbar({
     if (!ex) return;
     setSelectedExample(label);
     setOptimizer(ex.optimizer);
-    setLossName(ex.loss_function);
+    onLossNameChange(ex.loss_function);
     setLossKwargs(
       Object.fromEntries(
         Object.entries(ex.loss_kwargs).map(([k, v]) => [k, String(v)]),
@@ -250,6 +296,9 @@ export function Toolbar({
     const trimmedTol = tolerance.trim();
     const tolNum = trimmedTol === "" ? null : parseFloat(trimmedTol);
 
+    const trimmedEps = smoothEps.trim();
+    const epsNum = trimmedEps === "" ? null : parseFloat(trimmedEps);
+
     const base = {
       program,
       program_language: "soga_highlevel" as const,
@@ -262,6 +311,7 @@ export function Toolbar({
       n_steps: toInt(nSteps),
       tolerance: tolNum !== null && isNaN(tolNum) ? null : tolNum,
       patience: toInt(patience) || 30,
+      smooth_eps: epsNum !== null && isNaN(epsNum) ? null : epsNum,
       return_dist_summary: true,
     };
 
@@ -309,6 +359,7 @@ export function Toolbar({
   const running = status === "running";
   const params = selectedLossInfo?.params ?? [];
   const canRun = lossMode === "builtin" || dslErrors.length === 0;
+  const hasLossArgs = (lossMode === "builtin" ? params.length : dslParams.length) > 0;
 
   // find the name of the indices param that accompanies a trajectories param
   function indicesParamFor(trajParamName: string): string | undefined {
@@ -341,12 +392,13 @@ export function Toolbar({
 
           <div style={{ width: 1, height: 16, background: "var(--border)" }} />
 
-          <span style={LABEL}>optimizer</span>
+          <span style={LABEL} title={TIP.optimizer}>optimizer</span>
           <select
             style={SELECT}
             value={optimizer}
             onChange={(e) => setOptimizer(e.target.value)}
             disabled={running}
+            title={TIP.optimizer}
           >
             {optimizers.length === 0 ? (
               <option>Adam</option>
@@ -373,12 +425,13 @@ export function Toolbar({
 
           {lossMode === "builtin" && (
             <>
-              <span style={LABEL}>loss</span>
+              <span style={LABEL} title={TIP.loss}>loss</span>
               <select
                 style={SELECT}
                 value={lossName}
-                onChange={(e) => setLossName(e.target.value)}
+                onChange={(e) => onLossNameChange(e.target.value)}
                 disabled={running}
+                title={TIP.loss}
               >
                 {lossFunctions.length === 0 ? (
                   <option>signal_error</option>
@@ -391,7 +444,7 @@ export function Toolbar({
         </div>
 
         <div style={ROW}>
-          <span style={LABEL}>lr</span>
+          <span style={LABEL} title={TIP.lr}>lr</span>
           <input
             type="text"
             inputMode="decimal"
@@ -401,7 +454,7 @@ export function Toolbar({
             disabled={running}
           />
 
-          <span style={LABEL}>
+          <span style={LABEL} title={TIP.steps}>
             steps{optimizer === 'LBFGS' && (
               <span title="LBFGS runs up to 20 inner iterations per step" style={{ color: '#fac863', marginLeft: 3 }}>⚠</span>
             )}
@@ -417,7 +470,7 @@ export function Toolbar({
 
           <span
             style={LABEL}
-            title="Loss-stability threshold for convergence. Empty = disable early stopping."
+            title={TIP.tol}
           >tol</span>
           <input
             type="text"
@@ -430,7 +483,7 @@ export function Toolbar({
 
           <span
             style={LABEL}
-            title="Number of consecutive stable steps required to flag converged."
+            title={TIP.patience}
           >patience</span>
           <input
             type="number"
@@ -438,6 +491,20 @@ export function Toolbar({
             value={patience}
             min={1}
             onChange={(e) => setPatience(e.target.value)}
+            disabled={running}
+          />
+
+          <span
+            style={LABEL}
+            title={TIP.smoothEps}
+          >smooth_eps</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            style={{ ...INPUT, width: 56 }}
+            value={smoothEps}
+            placeholder="0.001"
+            onChange={(e) => setSmoothEps(e.target.value)}
             disabled={running}
           />
 
@@ -468,10 +535,13 @@ export function Toolbar({
         </div>
       </div>
 
-      <div style={{ ...ROW, gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {hasLossArgs && (
+          <div style={{ ...ROW, gap: 12 }}>
+            <span style={GROUP_LABEL}>loss arguments</span>
         {lossMode === "builtin" && params.map((p) => (
           <div key={p.name} style={ROW}>
-            <span style={LABEL}>{p.name}</span>
+            <span style={LABEL} title={LOSS_ARG_TIP[p.name]}>{p.name}</span>
             {p.type === "float[][]" ? (
               <CsvUpload
                 shape={trajShapes[p.name] ?? null}
@@ -506,7 +576,7 @@ export function Toolbar({
 
         {lossMode === "custom" && dslParams.map((p) => (
           <div key={p.name} style={ROW}>
-            <span style={LABEL}>{p.name}</span>
+            <span style={LABEL} title={p.type ? DSL_TYPE_TIP[p.type] : undefined}>{p.name}</span>
             {p.type === "traj_set" ? (
               <CsvUpload
                 shape={dslTrajShapes[p.name] ?? null}
@@ -562,13 +632,15 @@ export function Toolbar({
           </div>
         ))}
 
-        {Object.keys(paramValues).length > 0 && params.length > 0 && (
-          <div style={{ width: 1, height: 16, background: "var(--border)" }} />
+          </div>
         )}
 
+        {Object.keys(paramValues).length > 0 && (
+          <div style={{ ...ROW, gap: 12 }}>
+            <span style={GROUP_LABEL}>initial parameters</span>
         {Object.keys(paramValues).map((name) => (
           <div key={name} style={ROW}>
-            <span style={{ ...LABEL, color: "#f99157" }}>_{name}</span>
+            <span style={{ ...LABEL, color: "#f99157" }} title={TIP.initialParam}>_{name}</span>
             <input
               type="number"
               style={INPUT}
@@ -580,6 +652,8 @@ export function Toolbar({
             />
           </div>
         ))}
+          </div>
+        )}
       </div>
     </div>
   );
