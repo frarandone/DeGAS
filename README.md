@@ -132,7 +132,95 @@ loss_func = lambda dist : neg_log_likelihood(traj_set, dist, idx)
 
 In the module `optimization` other functions for loss definition are available such as the `L2_distance` function and the `signal_error` function.
 
-  
+### Loss DSL
+
+Losses can also be written in the DeGAS loss DSL, a small domain-specific language for expressing loss functions in a mathematical notation. Each DSL definition is parsed and compiled into an equivalent PyTorch-based callable at runtime, so it participates fully in automatic differentiation and gradient-based optimization.
+
+A loss definition has the form:
+
+```
+loss <name>(<param>[: <type>], ...) =
+    [<id> = <expr> ;]*
+    <return-expr>
+```
+
+The body is zero or more semicolon-terminated assignments followed by a single return expression whose value is the scalar loss. Type annotations are optional but recommended for clarity.
+
+#### Type annotations
+
+| Annotation   | Meaning                               |
+|--------------|---------------------------------------|
+| `dist`       | Gaussian mixture distribution object |
+| `traj_set`   | Set of observed trajectories          |
+| `index_list` | List of variable indices              |
+| `scalar`     | Floating-point constant               |
+| `int`        | Integer constant                      |
+
+#### Distribution accessors
+
+| Syntax                    | Meaning                                                                 |
+|---------------------------|-------------------------------------------------------------------------|
+| `d.mean()`                | Full mean vector of the distribution                                    |
+| `d.mean[idx]`             | Mean values at selected indices                                         |
+| `d.var()`                 | Full variance vector                                                    |
+| `d.var[idx]`              | Variance values at selected indices                                     |
+| `d.marg_pdf(v, idx)`      | Marginal PDF evaluated at identifier `v` over `idx` (must be a bound variable, not an inline slice) |
+| `d.pdf(v)`                | Full joint PDF evaluated at identifier `v`                              |
+
+#### Trajectory slicing
+
+```
+traj[:, idx]   # all rows, columns selected by idx
+```
+
+#### Aggregation functions
+
+| Function      | Meaning              |
+|---------------|----------------------|
+| `sum(e)`      | Sum of all elements  |
+| `mean_agg(e)` | Mean of all elements |
+| `max(e)`      | Maximum element      |
+| `min(e)`      | Minimum element      |
+
+#### Math functions
+
+`log(e)`, `exp(e)`, `abs(e)`, `sqrt(e)` applied element-wise.
+
+#### Index expressions
+
+| Syntax           | Meaning                                              |
+|------------------|------------------------------------------------------|
+| `[1, 2, 3]`      | Literal index list                                   |
+| `range(0, 5)`    | Integer range `[a, b)` — bounds must be integer literals, not variables |
+| `5`              | Single integer index                                 |
+| `idx`            | Variable holding an index                            |
+
+`ones(idx)` constructs a tensor of ones with the same shape as `idx`.
+
+#### Arithmetic
+
+Standard `+`, `-`, `*`, `/` operators with left-to-right associativity. Power uses `^` (right-associative). Unary `-` is supported.
+
+#### Comments
+
+```
+// single-line comment
+/* block comment */
+```
+
+#### Examples
+
+```
+loss l2_distance(trajectories: traj_set, distribution: dist, indices: index_list) =
+    sum( (trajectories[:, indices] - distribution.mean[indices]) ^ 2 )
+
+loss neg_log_likelihood(trajectories: traj_set, distribution: dist, indices: index_list) =
+    sliced = trajectories[:, indices];
+    - sum( log( distribution.marg_pdf(sliced, indices) ) )
+
+loss signal_error(distribution: dist, target: scalar) =
+    sum( (distribution.mean[range(0, 5)] - ones(range(0, 5)) * target) ^ 2 )
+```
 
 ### Running the optimization loop
 
