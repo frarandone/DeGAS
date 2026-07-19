@@ -67,26 +67,26 @@ class GaussianMix:
                 return torch.exp(MultivariateNormal(self.mu[k], covariance_matrix=self.sigma[k]).log_prob(x))
         return torch.exp(distributions.Normal(self.mu[k], torch.sqrt(self.sigma[k])).log_prob(x)).reshape(x.shape)
 
-    def marg_comp_pdf(self, x: torch.Tensor, k: int, idx: list[int] | int) -> torch.Tensor:
+    def marg_comp_log_pdf(self, x: torch.Tensor, k: int, idx: list[int] | int) -> torch.Tensor:
         if isinstance(idx, list):
             cov_submatrix = torch.clone(self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)])
             try:
-                return torch.exp(MultivariateNormal(self.mu[k][idx], covariance_matrix=cov_submatrix).log_prob(x))
+                return MultivariateNormal(self.mu[k][idx], covariance_matrix=cov_submatrix).log_prob(x)
             except ValueError:
                 eigs, _ = torch.linalg.eigh(cov_submatrix)
-                is_psd = torch.all(eigs > 0)
-                is_sym = torch.all(cov_submatrix == cov_submatrix.T)
-                if not is_psd:
+                if not torch.all(eigs > 0):
                     logger.warning("matrix k=%d is not psd! eigs: %s", k, eigs)
                     logger.warning("matrix k=%d is not psd! cov_submatrix: %s", k, cov_submatrix)
                     raise
-                if not is_sym:
+                if not torch.all(cov_submatrix == cov_submatrix.T):
                     logger.warning("matrix k=%d is not symmetric! cov_submatrix: %s", k, cov_submatrix)
-                    self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)] = new_cov_submatrix = make_sym(
-                        cov_submatrix
-                    )
-                return torch.exp(MultivariateNormal(self.mu[k][idx], covariance_matrix=new_cov_submatrix).log_prob(x))
-        return torch.exp(distributions.Normal(self.mu[k][idx], torch.sqrt(self.sigma[k][idx, idx])).log_prob(x))
+                    cov_submatrix = make_sym(cov_submatrix)
+                    self.sigma[k][torch.tensor(idx).unsqueeze(1), torch.tensor(idx)] = cov_submatrix
+                return MultivariateNormal(self.mu[k][idx], covariance_matrix=cov_submatrix).log_prob(x)
+        return distributions.Normal(self.mu[k][idx], torch.sqrt(self.sigma[k][idx, idx])).log_prob(x)
+
+    def marg_comp_pdf(self, x: torch.Tensor, k: int, idx: list[int] | int) -> torch.Tensor:
+        return torch.exp(self.marg_comp_log_pdf(x, k, idx))
 
     def pdf(self, x: torch.Tensor) -> torch.Tensor:
         comp_pdfs = torch.stack([self.comp_pdf(x, k) for k in range(self.n_comp())], dim=1)
@@ -95,6 +95,15 @@ class GaussianMix:
     def marg_pdf(self, x: torch.Tensor, idx: list[int] | int) -> torch.Tensor:
         comp_pdfs = torch.stack([self.marg_comp_pdf(x, k, idx) for k in range(self.n_comp())], dim=1)
         return torch.matmul(comp_pdfs, self.pi)
+
+    def marg_log_pdf(self, x: torch.Tensor, idx: list[int] | int) -> torch.Tensor:
+        """Log-density of the mixture marginal, entirely in log-space.
+
+        logsumexp over components keeps densities far below float64 range
+        finite, where log(marg_pdf(x)) would underflow to -inf.
+        """
+        log_pdfs = torch.stack([self.marg_comp_log_pdf(x, k, idx) for k in range(self.n_comp())], dim=1)
+        return torch.logsumexp(log_pdfs + torch.log(self.pi).view(1, -1), dim=1)
 
     def comp_cdf(self, x: torch.Tensor, k: int) -> torch.Tensor:
         if self.n_dim() > 1:

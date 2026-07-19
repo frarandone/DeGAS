@@ -35,11 +35,14 @@ LOSS_PARAM_SCHEMA: dict[str, list[LossParamDef]] = {
 
 
 def neg_log_likelihood(trajectories: torch.Tensor, indices: list[int]) -> LossFunction:
-    """Return a NLL loss over selected marginals of *dist* against *trajectories*."""
+    """Return a NLL loss over selected marginals of *dist* against *trajectories*.
+
+    Computed in log-space (marg_log_pdf) so that densities below float64 range
+    stay finite instead of underflowing to log(0) = -inf.
+    """
 
     def _loss(dist: Dist) -> torch.Tensor:
-        log_lik = torch.log(dist.gm.marg_pdf(trajectories[:, indices], indices))
-        return -torch.sum(log_lik)
+        return -torch.sum(dist.gm.marg_log_pdf(trajectories[:, indices], indices))
 
     return _loss
 
