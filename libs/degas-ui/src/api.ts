@@ -1,4 +1,14 @@
-import type { LossFunctionInfo, LossValidateResponse, OptimizationRequest, StepOut } from "./types";
+import type {
+  LossFunctionInfo,
+  LossMode,
+  LossValidateResponse,
+  OptimizationRequest,
+  RunErrorKind,
+  RunOutcome,
+  SessionData,
+  SessionSummary,
+  StepOut,
+} from "./types";
 
 const BASE = "/api";
 
@@ -35,71 +45,114 @@ export async function validateLossSource(source: string): Promise<LossValidateRe
   return res.json();
 }
 
-export function streamOptimization(
-  request: OptimizationRequest,
-  onStep: (step: StepOut) => void,
-  onEnd: (converged: boolean, finalParams: Record<string, number>) => void,
-  onError: (detail: string) => void,
-  signal: AbortSignal,
-): void {
-  fetch(`${BASE}/optimization/run?stream=true`, {
+export interface RunHandle {
+  /** Ask the server to stop after the current step (sends a stop frame). */
+  stop: () => void;
+  /** Tear down the socket and detach handlers (no further callbacks fire). */
+  dispose: () => void;
+}
+
+interface RunHandlers {
+  onStep: (step: StepOut) => void;
+  onEnd: (outcome: RunOutcome, converged: boolean, finalParams: Record<string, number>) => void;
+  onError: (detail: string, kind: RunErrorKind) => void;
+}
+
+
+export async function createSession(payload: {
+  loss_mode: LossMode;
+  loss_name: string;
+  request: string;
+}): Promise<SessionData> {
+  const res = await fetch(`${BASE}/sessions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getSession(id: string): Promise<SessionData> {
+  const res = await fetch(`${BASE}/sessions/${id}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function patchSession(
+  id: string,
+  payload: { steps?: StepOut[]; status?: string; outcome?: string; name?: string },
+  ownerToken?: string,
+): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (ownerToken) headers["X-Owner-Token"] = ownerToken;
+  await fetch(`${BASE}/sessions/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSession(id: string, ownerToken: string): Promise<void> {
+  await fetch(`${BASE}/sessions/${id}`, {
+    method: "DELETE",
+    headers: { "X-Owner-Token": ownerToken },
+  });
+}
+
+export async function getSessions(limit = 50): Promise<SessionSummary[]> {
+  const res = await fetch(`${BASE}/sessions?limit=${limit}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/** Open a WebSocket, run the optimization, and stream frames to the handlers. */
+export function runOptimization(request: OptimizationRequest, handlers: RunHandlers): RunHandle {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${window.location.host}${BASE}/optimization/ws`);
+  let settled = false; // true once an end/error frame arrived — suppresses the close→connection_lost fallback
+
+  ws.onopen = () => ws.send(JSON.stringify(request));
+  ws.onmessage = (ev) => {
+    let m: { type?: string; [k: string]: unknown };
+    try {
+      m = JSON.parse(ev.data as string);
+    } catch {
+      return; // ignore malformed frames
+    }
+    if (m.type === "step") {
+      handlers.onStep(m as unknown as StepOut);
+    } else if (m.type === "end") {
+      settled = true;
+      handlers.onEnd(m.outcome as RunOutcome, m.converged as boolean, m.final_params as Record<string, number>);
+    } else if (m.type === "error") {
+      settled = true;
+      handlers.onError(String(m.detail ?? "Optimization failed."), (m.kind as RunErrorKind) ?? "compute_error");
+    }
+    // "start" frames carry no UI state beyond what status already conveys.
+  };
+  ws.onclose = () => {
+    if (!settled) {
+      settled = true;
+      handlers.onError("Connection lost. The run may have stopped on the server.", "connection_lost");
+    }
+  };
+
+  return {
+    stop: () => {
+      // Any frame signals stop; the server replies with end{stopped} and closes.
+      if (ws.readyState === WebSocket.OPEN) ws.send("stop");
+      else ws.close();
     },
-    body: JSON.stringify(request),
-    signal,
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        const err = await res
-          .json()
-          .catch(() => ({ detail: `HTTP ${res.status}` }));
-        onError(
-          typeof err.detail === "string"
-            ? err.detail
-            : JSON.stringify(err.detail),
-        );
-        return;
+    dispose: () => {
+      settled = true; // suppress the close→connection_lost fallback
+      ws.onmessage = null;
+      ws.onclose = null;
+      try {
+        ws.close();
+      } catch {
+        /* noop */
       }
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop()!;
-
-        for (const part of parts) {
-          if (!part.trim()) continue;
-          const lines = part.split("\n");
-          const eventType = lines
-            .find((l) => l.startsWith("event:"))
-            ?.slice(6)
-            .trim();
-          const dataLine = lines
-            .find((l) => l.startsWith("data:"))
-            ?.slice(5)
-            .trim();
-          if (!dataLine) continue;
-          try {
-            const data = JSON.parse(dataLine);
-            if (eventType === "step") onStep(data);
-            else if (eventType === "end")
-              onEnd(data.converged, data.final_params);
-            else if (eventType === "error") onError(data.detail);
-          } catch {
-            // malformed event — ignore
-          }
-        }
-      }
-    })
-    .catch((err) => {
-      if (err.name !== "AbortError") onError(String(err));
-    });
+    },
+  };
 }

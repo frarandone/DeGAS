@@ -9,10 +9,6 @@ export function ThemeToggle({ theme, onToggle }: Props) {
       onClick={onToggle}
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
       style={{
-        position: "fixed",
-        top: 16,
-        right: 20,
-        zIndex: 100,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

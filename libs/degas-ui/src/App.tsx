@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchLossFunctions, fetchOptimizers, fetchHealth, type ServerHealth } from "./api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchLossFunctions, fetchOptimizers, fetchHealth, createSession, getSession, patchSession, type ServerHealth } from "./api";
 import { buildExportBundle, downloadBundle } from "./export";
 import { SogaEditor } from "./components/SogaEditor";
 import { LossDSLEditor } from "./components/LossDSLEditor";
 import { ResultsPanel } from "./components/ResultsPanel";
 import { DistributionPanel } from "./components/DistributionPanel";
+import { PanelErrorBoundary } from "./components/PanelErrorBoundary";
 import { ErrorToast } from "./components/ErrorToast";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Toolbar } from "./components/Toolbar";
-import { EXAMPLES, type Example } from "./examples";
+import { HistoryPanel } from "./components/HistoryPanel";
+import { setOwnerToken } from "./session-storage";
+import { EXAMPLES } from "./examples";
 import { useOptimization } from "./hooks/useOptimization";
 import { useTheme } from "./hooks/useTheme";
-import type { LossFunctionInfo, LossMode, LossParamInfo, OptimizationRequest, RunErrorKind } from "./types";
+import type { LossFunctionInfo, LossMode, LossParamInfo, OptimizationRequest, RunErrorKind, RunOutcome } from "./types";
 
 function formatRunError(kind: RunErrorKind | null, detail: string): string {
   switch (kind) {
@@ -36,6 +39,8 @@ loss signal_error(d: dist, target: scalar) =
 `;
 
 const REPO_URL = "https://github.com/frarandone/DeGAS";
+const SOGA_SYNTAX_URL = `${REPO_URL}#writing-and-compiling-a-program`;
+const LOSS_DSL_URL = `${REPO_URL}#loss-dsl`;
 
 const PANEL: React.CSSProperties = {
   border: "1px solid var(--border)",
@@ -43,6 +48,22 @@ const PANEL: React.CSSProperties = {
   overflow: "hidden",
   display: "flex",
   flexDirection: "column",
+};
+
+const NAV_BTN: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  background: "var(--btn-bg)",
+  border: "1px solid var(--btn-border)",
+  borderRadius: 8,
+  padding: "6px 10px",
+  cursor: "pointer",
+  lineHeight: 1,
+  color: "var(--text-primary)",
+  fontSize: 12,
+  fontFamily: "inherit",
+  transition: "background 0.15s",
 };
 
 
@@ -116,19 +137,15 @@ function Resizer({
 }
 
 
-function GitHubLink() {
+function NavLink({ href, title, children }: { href: string; title: string; children: React.ReactNode }) {
   return (
     <a
-      href={REPO_URL}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title="View on GitHub (program & loss syntax docs)"
+      title={title}
       style={{
-        position: "fixed",
-        top: 16,
-        right: 64,
-        zIndex: 100,
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
         background: "var(--btn-bg)",
@@ -138,15 +155,15 @@ function GitHubLink() {
         cursor: "pointer",
         lineHeight: 1,
         color: "var(--text-primary)",
+        textDecoration: "none",
+        fontSize: 12,
+        fontWeight: 600,
         transition: "background 0.15s",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "var(--btn-hover)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "var(--btn-bg)")}
     >
-      { }
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-      </svg>
+      {children}
     </a>
   );
 }
@@ -155,8 +172,10 @@ function GitHubLink() {
 
 export default function App() {
   const { theme, toggle } = useTheme();
-  const { steps, status, error, errorKind, outcome, lastRequest, wallClockMs, run, abort } = useOptimization();
+  const { steps, status, error, errorKind, outcome, slowStep, lastRequest, wallClockMs, run, abort, restoreSteps } = useOptimization();
   const displayError = error == null ? null : formatRunError(errorKind, error);
+  // connection_lost is shown only in the toast; suppress the in-panel banner to avoid duplication
+  const panelError = errorKind === 'connection_lost' ? null : displayError;
 
   const [program, setProgram] = useState(EXAMPLES[0].program);
   const [lossFunctions, setLossFunctions] = useState<LossFunctionInfo[]>([]);
@@ -164,6 +183,22 @@ export default function App() {
   const [dismissedError, setDismissedError] = useState<string | null>(null);
   const [health, setHealth] = useState<ServerHealth | null>(null);
   const healthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Session state
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessionToast, setSessionToast] = useState<string | null>(null);
+
+  function setSessionId(id: string | null) {
+    setCurrentSessionId(id);
+    sessionIdRef.current = id;
+  }
+
+  const showToast = useCallback((msg: string, ms = 3000) => {
+    setSessionToast(msg);
+    setTimeout(() => setSessionToast(null), ms);
+  }, []);
 
   const [lossMode, setLossMode] = useState<LossMode>("builtin");
   const [lossName, setLossName] = useState(EXAMPLES[0].loss_function);
@@ -186,25 +221,10 @@ export default function App() {
     [lossDefs],
   );
 
-  function isPristineLossSource(src: string): boolean {
-    return src.trim() === "" || pristineSources.has(src);
-  }
-
-  function lossPreview(name: string): { source: string; available: boolean } {
-    const src = lossDefs[name];
-    if (src) return { source: src, available: true };
-    return {
-      source:
-        `// No DSL definition available for "${name}" yet.\n` +
-        `// Switch to 'custom' to write your own loss.`,
-      available: false,
-    };
-  }
-
   function handleLossModeChange(mode: LossMode) {
     if (mode === "custom") {
       const def = lossDefs[lossName];
-      if (def && isPristineLossSource(lossSource)) {
+      if (def && (lossSource.trim() === "" || pristineSources.has(lossSource))) {
         setLossSource(def);
       }
     }
@@ -232,8 +252,67 @@ export default function App() {
     return () => { if (healthTimerRef.current) clearTimeout(healthTimerRef.current); };
   }, []);
 
-  function handleSelectExample(ex: Example) {
-    setProgram(ex.program);
+  // Restore session from URL on mount
+  useEffect(() => {
+    const sid = new URLSearchParams(window.location.search).get("s");
+    if (!sid) return;
+    getSession(sid)
+      .then((s) => {
+        const req = JSON.parse(s.request);
+        setProgram(req.program ?? program);
+        setLossMode(s.loss_mode as LossMode);
+        setLossName(s.loss_name);
+        if (s.loss_mode === "custom" && req.loss_source) setLossSource(req.loss_source);
+        if (s.steps.length > 0) restoreSteps(s.steps, (s.outcome ?? null) as RunOutcome | null);
+        setSessionId(sid);
+        showToast(`viewing session ${sid}`);
+      })
+      .catch(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("s");
+        window.history.replaceState({}, "", url);
+        showToast("session not found or expired");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Patch session when run finishes
+  useEffect(() => {
+    const sid = sessionIdRef.current;
+    if (!sid || (status !== "done" && status !== "error")) return;
+    patchSession(sid, {
+      steps,
+      status: status === "error" ? "error" : "done",
+      ...(outcome ? { outcome } : {}),
+    }).catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  const handleRun = useCallback(async (req: OptimizationRequest) => {
+    try {
+      const session = await createSession({
+        loss_mode: lossMode,
+        loss_name: lossName,
+        request: JSON.stringify(req),
+      });
+      setSessionId(session.id);
+      if (session.owner_token) setOwnerToken(session.id, session.owner_token);
+      const url = new URL(window.location.href);
+      url.searchParams.set("s", session.id);
+      window.history.pushState({}, "", url);
+    } catch {
+      // Session creation failure is non-fatal — run continues without persistence
+    }
+    run(req);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lossMode, lossName, run]);
+
+  function handleNewOptimization() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("s");
+    window.history.pushState({}, "", url);
+    setSessionId(null);
+    showToast("ready for a new run", 2500);
   }
 
   function handleDownload() {
@@ -244,7 +323,6 @@ export default function App() {
     );
   }
 
-  const preview = lossPreview(lossName);
   const selectedDef = lossDefs[lossName];
   const isCustom = lossMode === "custom";
 
@@ -262,17 +340,77 @@ export default function App() {
         boxSizing: "border-box",
       }}
     >
+      <HistoryPanel
+        open={historyOpen}
+        currentSessionId={currentSessionId}
+        onClose={() => setHistoryOpen(false)}
+        onSelectSession={(id) => {
+          const url = new URL(window.location.href);
+          url.searchParams.set("s", id);
+          window.location.href = url.toString();
+        }}
+      />
+
+      {sessionToast && (
+        <div style={{
+          position: "fixed", bottom: 56, left: "50%", transform: "translateX(-50%)",
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: 8, padding: "6px 14px", fontSize: 12,
+          color: "var(--text-muted)", zIndex: 300, pointerEvents: "none",
+        }}>
+          {sessionToast}
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <ThemeToggle theme={theme} onToggle={toggle} />
-        <GitHubLink />
-        {health !== null && (
-          <span
-            title={`${health.slots_free} of ${health.max_concurrent} optimization slots free`}
-            style={{ fontSize: 11, color: health.slots_free === 0 ? "#ec5f67" : "var(--text-muted)" }}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <ThemeToggle theme={theme} onToggle={toggle} />
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            title="View runs"
+            style={{ ...NAV_BTN, ...(currentSessionId ? { borderColor: "#6699cc44" } : {}) }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--btn-hover)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--btn-bg)")}
           >
-            {health.slots_free === 0 ? "server busy" : `${health.slots_free}/${health.max_concurrent} slots free`}
-          </span>
-        )}
+            ☰ previous runs
+          </button>
+          <button
+            type="button"
+            onClick={handleNewOptimization}
+            title="New optimization"
+            style={NAV_BTN}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--btn-hover)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--btn-bg)")}
+          >
+            + new
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {health !== null && (
+            <span
+              title={`${health.slots_free} of ${health.max_concurrent} optimization slots free`}
+              style={{ fontSize: 11, color: health.slots_free === 0 ? "#ec5f67" : "var(--text-muted)" }}
+            >
+              {health.slots_free === 0 ? "server busy" : `${health.slots_free}/${health.max_concurrent} slots free`}
+            </span>
+          )}
+          <a
+            href="https://github.com/ouz-m"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 11, color: "var(--text-muted)", textDecoration: "none" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+          >
+            ouz-m
+          </a>
+          <NavLink href={REPO_URL} title="View on GitHub (program & loss syntax docs)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+          </NavLink>
+        </div>
       </div>
 
       {/* main: left | resizer | right */}
@@ -282,12 +420,15 @@ export default function App() {
         <div style={{ flex: leftFrac, minWidth: 200, ...PANEL, background: "var(--bg-surface)" }}>
           {/* editor area: soga [resizer] loss-editor (always shown) */}
           <div ref={leftEditorRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-            <div style={{ flex: editorFrac, minHeight: 60 }}>
+            <div style={{ flex: editorFrac, minHeight: 60, position: "relative" }}>
               <SogaEditor
                 theme={theme}
                 value={program}
                 onChange={(v) => { if (v !== undefined) setProgram(v); }}
               />
+              <div style={{ position: "absolute", top: 8, right: 18, zIndex: 10 }}>
+                <NavLink href={SOGA_SYNTAX_URL} title="Program syntax documentation">?</NavLink>
+              </div>
             </div>
 
             <Resizer direction="y" onMouseDown={(e) => startDrag(e, leftEditorRef, "y", setEditorFrac, 0.15, 0.85)} />
@@ -335,15 +476,18 @@ export default function App() {
                 ) : (
                   <span>
                     loss preview · <span style={{ color: "#fac863" }}>{lossName}</span>
-                    {preview.available ? " · read-only" : " · no definition yet"}
+                    {selectedDef ? " · read-only" : " · no definition yet"}
                   </span>
                 )}
               </div>
-              <div style={{ flex: 1, minHeight: 0 }}>
+              <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+                <div style={{ position: "absolute", top: 8, right: 18, zIndex: 10 }}>
+                  <NavLink href={LOSS_DSL_URL} title="Loss DSL documentation">?</NavLink>
+                </div>
                 <LossDSLEditor
                   key={isCustom ? "loss-editor-custom" : `loss-preview-${lossName}`}
                   theme={theme}
-                  value={isCustom ? lossSource : preview.source}
+                  value={isCustom ? lossSource : (selectedDef ?? `// No DSL definition available for "${lossName}" yet.\n// Switch to 'custom' to write your own loss.`)}
                   onChange={setLossSource}
                   onValidate={(params, errors) => {
                     setDslParams(params);
@@ -367,9 +511,9 @@ export default function App() {
             lossFunctions={lossFunctions}
             optimizers={optimizers}
             status={status}
-            onRun={(req: OptimizationRequest) => run(req)}
+            onRun={handleRun}
             onAbort={abort}
-            onSelectExample={handleSelectExample}
+            onSelectExample={(ex) => setProgram(ex.program)}
           />
         </div>
 
@@ -379,19 +523,24 @@ export default function App() {
         {/* right column: results [resizer] distribution */}
         <div ref={rightColRef} style={{ flex: 1 - leftFrac, minWidth: 200, display: "flex", flexDirection: "column" }}>
           <div style={{ ...PANEL, flex: rightYFrac, background: "var(--bg-results)", minHeight: 60 }}>
-            <ResultsPanel
-              steps={steps}
-              status={status}
-              error={displayError}
-              outcome={outcome}
-              theme={theme}
-              canDownload={steps.length > 0}
-              onDownload={handleDownload}
-            />
+            <PanelErrorBoundary label="Results">
+              <ResultsPanel
+                steps={steps}
+                status={status}
+                error={panelError}
+                outcome={outcome}
+                slowStep={slowStep}
+                theme={theme}
+                canDownload={steps.length > 0}
+                onDownload={handleDownload}
+              />
+            </PanelErrorBoundary>
           </div>
           <Resizer direction="y" onMouseDown={(e) => startDrag(e, rightColRef, "y", setRightYFrac)} />
           <div style={{ ...PANEL, flex: 1 - rightYFrac, background: "var(--bg-results)", minHeight: 60 }}>
-            <DistributionPanel steps={steps} theme={theme} />
+            <PanelErrorBoundary label="Distribution">
+              <DistributionPanel steps={steps} theme={theme} />
+            </PanelErrorBoundary>
           </div>
         </div>
       </div>

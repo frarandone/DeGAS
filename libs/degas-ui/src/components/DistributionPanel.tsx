@@ -29,10 +29,11 @@ export function DistributionPanel({ steps, theme }: Props) {
     if (isEmpty || !plotRef.current) return;
 
     const xs = steps.map((s) => s.step);
+    const safeNum = (v: number) => (Number.isFinite(v) ? v : null);
 
     const traces = paramNames.map((name, i) => ({
       x: xs,
-      y: steps.map((s) => s.params[name] ?? null),
+      y: steps.map((s) => safeNum(s.params[name] ?? NaN)),
       name: `_${name}`,
       type: "scatter",
       mode: "lines",

@@ -27,12 +27,13 @@ interface Props {
   status: RunStatus;
   error: string | null;
   outcome: RunOutcome | null;
+  slowStep: boolean;
   theme: "light" | "dark";
   canDownload: boolean;
   onDownload: () => void;
 }
 
-export function ResultsPanel({ steps, status, error, outcome, theme, canDownload, onDownload }: Props) {
+export function ResultsPanel({ steps, status, error, outcome, slowStep, theme, canDownload, onDownload }: Props) {
   const dark = theme === "dark";
   const bg = dark ? "#0a0a0a" : "#fafaf9";
   const fg = dark ? "#e8e6e0" : "#1a1a1a";
@@ -73,9 +74,11 @@ export function ResultsPanel({ steps, status, error, outcome, theme, canDownload
 
     const xs = steps.map((s) => s.step);
 
+    const safeNum = (v: number) => (Number.isFinite(v) ? v : null);
+
     const lossTrace = {
       x: xs,
-      y: steps.map((s) => s.loss),
+      y: steps.map((s) => safeNum(s.loss)),
       name: "Loss",
       type: "scatter",
       mode: "lines",
@@ -86,7 +89,7 @@ export function ResultsPanel({ steps, status, error, outcome, theme, canDownload
 
     const paramTraces = paramNames.map((name, i) => ({
       x: xs,
-      y: steps.map((s) => s.params[name] ?? null),
+      y: steps.map((s) => safeNum(s.params[name] ?? NaN)),
       name,
       type: "scatter",
       mode: "lines",
@@ -203,6 +206,20 @@ export function ResultsPanel({ steps, status, error, outcome, theme, canDownload
               {OUTCOME_BADGE[outcome].label}
             </span>
           )}
+          {status === "error" && (
+            <span
+              style={{
+                fontSize: 10,
+                padding: "2px 7px",
+                borderRadius: 20,
+                background: "#ec5f6722",
+                border: "1px solid #ec5f67",
+                color: "#ec5f67",
+              }}
+            >
+              failed
+            </span>
+          )}
           <button
             type="button"
             onClick={onDownload}
@@ -263,6 +280,40 @@ export function ResultsPanel({ steps, status, error, outcome, theme, canDownload
         </div>
       )}
 
+      {slowStep && status === "running" && (
+        <div
+          style={{
+            padding: "6px 14px",
+            background: "#fac86312",
+            borderTop: "1px solid #fac86344",
+            borderBottom: "1px solid #fac86344",
+            color: "#fac863",
+            fontSize: 11,
+            flexShrink: 0,
+          }}
+        >
+          This step is taking longer than usual; consider checking your loss arguments and learning rate, or stop the optimization manually.
+        </div>
+      )}
+
+      {error !== null && (
+        <div
+          style={{
+            padding: "5px 14px",
+            background: "#ec5f6712",
+            borderTop: "1px solid #ec5f6744",
+            borderBottom: "1px solid #ec5f6744",
+            color: "#ec5f67",
+            fontSize: 11,
+            fontFamily: "Menlo, Consolas, 'Courier New', monospace",
+            flexShrink: 0,
+            wordBreak: "break-word",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
       {/* Plotly div stays mounted to keep the ref alive */}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <div
@@ -277,15 +328,7 @@ export function ResultsPanel({ steps, status, error, outcome, theme, canDownload
             letterSpacing: "0.08em",
           }}
         >
-          {error ? (
-            <span
-              style={{ color: "#ec5f67", maxWidth: 320, textAlign: "center" }}
-            >
-              {error}
-            </span>
-          ) : (
-            "run optimization to see results"
-          )}
+          run optimization to see results
         </div>
         <div
           ref={plotRef}

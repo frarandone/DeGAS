@@ -238,6 +238,8 @@ export function Toolbar({
   const [lastProgram, setLastProgram] = useState(program);
   if (program !== lastProgram) {
     setLastProgram(program);
+    const matched = EXAMPLES.find((ex) => ex.program.trim() === program.trim());
+    setSelectedExample(matched ? matched.label : "Custom");
     const names = [...new Set(
       [...program.matchAll(/_([a-zA-Z][a-zA-Z0-9]*)/g)].map((m) => m[1])
     )];
@@ -385,6 +387,9 @@ export function Toolbar({
             value={selectedExample}
             onChange={(e) => handleExampleChange(e.target.value)}
           >
+            {selectedExample === "Custom" && (
+              <option value="Custom" disabled>Custom</option>
+            )}
             {EXAMPLES.map((ex) => (
               <option key={ex.label}>{ex.label}</option>
             ))}

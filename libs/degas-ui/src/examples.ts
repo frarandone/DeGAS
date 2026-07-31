@@ -47,6 +47,7 @@ for i in range(31) {
             skip;
         } end if;
     } end if;
+    prune(10);
 
 } end for;
 
@@ -125,6 +126,8 @@ for i in range(21) {
     w = w - 0.1;
     v[i] = v[i] + gauss(0., 0.5);
 
+    prune(10);
+
 } end for;`,
     initial_params: { s1: 8.0, s2: 12.0 },
     loss_function: "signal_error",
@@ -159,6 +162,7 @@ for i in range(51) {
 
     v = v + 0.01*torq + gauss(0, 0.25);
     currAng = currAng + 0.05*v + 0.05*oldv + gauss(0., 0.25);
+    prune(10);
 
 } end for;
 
@@ -222,6 +226,7 @@ for i in range(35) {
             skip;
         } end if;
     } end if;
+    prune(10);
 } end for;
 
 H[35] = currH;`,

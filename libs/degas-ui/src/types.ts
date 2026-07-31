@@ -56,6 +56,30 @@ export interface OptimizationRequest {
 
 export type RunStatus = 'idle' | 'running' | 'done' | 'error'
 
+export interface SessionData {
+  id: string
+  created_at: string
+  expires_at: string
+  loss_mode: LossMode
+  loss_name: string
+  name: string | null
+  request: string  // serialised OptimizationRequest JSON
+  steps: StepOut[]
+  status: string
+  outcome: string | null
+  owner_token?: string  // only present in the create response
+}
+
+export interface SessionSummary {
+  id: string
+  created_at: string
+  loss_mode: LossMode
+  loss_name: string
+  name: string | null
+  status: string
+  outcome: string | null
+}
+
 // Terminal outcome of a run that produced results (sent on the `end` frame).
 // See docs/feedback-2026-06/08-run-outcome/taxonomy.md.
 export type RunOutcome = 'converged' | 'not_converged' | 'stopped' | 'run_timeout'
