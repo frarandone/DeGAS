@@ -16,14 +16,24 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=T
     total_start = time()
     loss_list = []
     number_of_iterations = n_steps
+    # Adam isn't guaranteed to end on its best iterate (it can overshoot/diverge in later
+    # steps), so we track the best (params, loss) seen and snap back to it before returning --
+    # otherwise callers reading params_dict alongside loss_list[-1] as "the optimized result"
+    # can end up with a worse point than one Adam actually visited during this call.
+    best_loss = None
+    best_params = None
     for i in range(n_steps):
 
         optimizer.zero_grad()  # Reset gradients
-    
+
         # loss
         current_dist = start_SOGA(cfg, params_dict)     # we compute the output distribution for the current values of the parameters using start_SOGA
         loss = loss_func(current_dist)        # we compute the loss using the set of trajectories and the current output distribution
         loss_list.append(loss.item())
+
+        if best_loss is None or loss_list[-1] < best_loss:
+            best_loss = loss_list[-1]
+            best_params = {key: value.detach().clone() for key, value in params_dict.items()}
 
         # check for convergence within a tolerance of 1e-8 and wit a patience of 30 iterations
         if i > 30 and abs(loss_list[-1] - loss_list[-2]) < 1e-8 and all(abs(loss_list[-j] - loss_list[-j-1]) < 1e-8 for j in range(2, 31)):
@@ -34,7 +44,7 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=T
 
         # Backpropagate
         loss.backward(retain_graph=True)
-    
+
         # Update parameters
         optimizer.step()
 
@@ -49,10 +59,19 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=T
     total_end = time()
     if print_progress:
         print('Optimization performed in ', round(total_end-total_start, 3))
+
+    # Snap params_dict (and the trailing loss_list entry) back to the best iterate seen,
+    # so a caller's "final" loss and "final" params are always mutually consistent.
+    if best_params is not None and best_loss < loss_list[-1]:
+        with torch.no_grad():
+            for key, value in params_dict.items():
+                value.copy_(best_params[key])
+        loss_list[-1] = best_loss
+
     #put current dist mean and cov in a file
-    with open("current_dist_stats.txt", "a") as f:
-        f.write(f"Current dist mean: {current_dist.gm.mean().detach().numpy()}\n")
-        f.write(f"Current dist cov: {current_dist.gm.cov().detach().numpy()}\n")
+    #with open("current_dist_stats.txt", "a") as f:
+        #f.write(f"Current dist mean: {current_dist.gm.mean().detach().numpy()}\n")
+        #f.write(f"Current dist cov: {current_dist.gm.cov().detach().numpy()}\n")
     return loss_list, round(total_end-total_start, 3), number_of_iterations
 
 

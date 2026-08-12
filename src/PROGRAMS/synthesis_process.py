@@ -48,9 +48,9 @@ def run_optimization(name, data, params_init, true_params, eps, sensitivity_anal
     params_dict = initialize_params(params_init)  
     output_dist = start_SOGA(cfg, params_dict)
     print("number of components: ", output_dist.gm.pi.shape[0])
-    with open("current_dist_stats.txt", "a") as f:
+    #with open("current_dist_stats.txt", "a") as f:
         #write program name withpout overwriting
-        f.write(f"Program: {name}\n")
+        #f.write(f"Program: {name}\n")
     data_var_list = get_vars(name)
     data_var_index = [output_dist.var_list.index(var) for var in data_var_list]
     data = torch.tensor(data, dtype=torch.float64)

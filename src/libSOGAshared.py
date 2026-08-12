@@ -24,7 +24,7 @@ import re
 #from scipy.stats import multivariate_normal as mvnorm
 from itertools import product
 from functools import partial
-
+torch.set_default_dtype(torch.float64)
 
 ### TOLERANCE PARAMETERS 
 
@@ -168,9 +168,13 @@ class GaussianMix():
         self.sigma = self.sigma[indexes[0], :, :]
 
     def sample(self,n_samples=1):
-        weights = self.pi.squeeze()
-        mus = self.mu.squeeze()
-        covs = self.sigma.squeeze()
+        # squeeze() (no dim) also collapses a size-1 component axis (K=1, e.g. a
+        # single-component GMM) or a size-1 variable axis (D=1), breaking the K, D
+        # unpack below; mu/sigma are already exactly (K,D)/(K,D,D), so only pi's
+        # known-redundant trailing dim needs dropping.
+        weights = self.pi.squeeze(-1)
+        mus = self.mu
+        covs = self.sigma
         K, D = mus.shape
         
         # Step 1: choose components according to weights
