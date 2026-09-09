@@ -20,6 +20,7 @@ from pydegas.mixtures.distribution import Dist, extend_dist
 from pydegas.mixtures.gaussian_mix import GaussianMix
 from pydegas.mixtures.numerics import TruncatedNormal
 from pydegas.parse.trunc import TRUNCLexer, TRUNCListener, TRUNCParser
+from pydegas.parse.values import unpack_gm_list
 
 
 logger = logging.getLogger(__name__)
@@ -258,9 +259,9 @@ class TruncRule(TRUNCListener):
     def _collect_gm_term(self, term: Any) -> None:
         """Append weights, means, and variances of a ``gm(π, μ, σ)`` term."""
         gm_ctx = term.gm()
-        self.aux_pis.append(gm_ctx.list_()[0].unpack(self.parameters))
-        self.aux_means.append(gm_ctx.list_()[1].unpack(self.parameters))
-        self.aux_covs.append(torch.pow(gm_ctx.list_()[2].unpack(self.parameters), 2))
+        self.aux_pis.append(unpack_gm_list(gm_ctx.list_(0), self.parameters))
+        self.aux_means.append(unpack_gm_list(gm_ctx.list_(1), self.parameters))
+        self.aux_covs.append(unpack_gm_list(gm_ctx.list_(2), self.parameters).square())
 
     def _parse_monomial(self, ctx: Any, operator_ctx: Any = None) -> None:
         """Parse a monomial term and accumulate its coefficient."""
@@ -268,7 +269,7 @@ class TruncRule(TRUNCListener):
             variable_name = ctx.var()._getText(self.data)
             coefficient = torch.tensor(1.0)
             if ctx.const():
-                coefficient = self._parse_constant(ctx)
+                coefficient = self._parse_constant(ctx.const())
             if operator_ctx and operator_ctx.SUB():
                 coefficient = -coefficient
             variable_index = self.variables.index(variable_name)
@@ -277,7 +278,7 @@ class TruncRule(TRUNCListener):
             self._collect_gm_term(ctx.var())
             coefficient = torch.tensor(1.0)
             if ctx.const():
-                coefficient = self._parse_constant(ctx)
+                coefficient = self._parse_constant(ctx.const())
             if operator_ctx and operator_ctx.SUB():
                 coefficient = -coefficient
             self.coefficients = torch.hstack([self.coefficients, coefficient])

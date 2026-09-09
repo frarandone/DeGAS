@@ -195,16 +195,38 @@ def test_l2_uses_requested_indices_instead_of_reference_hard_coded_slice(referen
     assert old.item() == pytest.approx(285.0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AttributeError,
-    reason="TRUNCParser.ListContext lost the reference unpack helper for gm literals in guards.",
-)
-def test_gaussian_literal_in_guard_matches_reference(reference, assert_same_distribution):
+@pytest.mark.parametrize("smoothed", [False, True])
+def test_gaussian_literal_in_guard_matches_reference(reference, assert_same_distribution, smoothed):
     from pydegas.cfg.builder import from_text
+    from pydegas.cfg.smoother import smooth
     from pydegas.semantics.engine import start_soga
 
     program = "x = gm([1.0],[0.0],[1.0]); observe(x + gm([1.0],[0.0],[1.0]) > 0);"
-    expected = reference.engine.start_SOGA(reference.builder.produce_cfg_text(program))
-    actual = start_soga(from_text(program))
+    old_cfg = reference.builder.produce_cfg_text(program)
+    new_cfg = from_text(program)
+    if smoothed:
+        reference.smoother.smooth_cfg(old_cfg)
+        smooth(new_cfg)
+    expected = reference.engine.start_SOGA(old_cfg)
+    actual = start_soga(new_cfg)
     assert_same_distribution(actual, expected)
+
+
+def test_gaussian_guard_parameter_gradients_match_reference(reference, make_dist, assert_same_distribution):
+    from pydegas.semantics.truncate import truncate
+
+    args = (["x"], [1.0], [[0.0]], [[[1.0]]])
+    condition = "x + gm([0.4,0.6],[-1.0,_mu],[0.5,_sigma]) > 0"
+    old_params = {"mu": torch.tensor(0.3, requires_grad=True), "sigma": torch.tensor(0.7, requires_grad=True)}
+    new_params = {name: value.detach().clone().requires_grad_() for name, value in old_params.items()}
+    old_mass, old = reference.truncate.truncate(
+        make_dist(*args, implementation=reference.shared), condition, {}, old_params
+    )
+    new_mass, new = truncate(make_dist(*args), condition, {}, new_params)
+    torch.testing.assert_close(new_mass, old_mass)
+    assert_same_distribution(new, old)
+    old_gradients = torch.autograd.grad(old_mass + old.gm.mean().sum(), tuple(old_params.values()))
+    new_gradients = torch.autograd.grad(new_mass + new.gm.mean().sum(), tuple(new_params.values()))
+    for actual, expected in zip(new_gradients, old_gradients, strict=True):
+        assert torch.isfinite(actual) and actual.abs() > 0
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)

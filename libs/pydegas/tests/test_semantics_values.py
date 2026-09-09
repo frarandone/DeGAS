@@ -86,6 +86,17 @@ def test_general_linear_guard_matches_halfspace_formula(make_dist):
     torch.testing.assert_close(actual.gm.cov(), torch.eye(2) - torch.full((2, 2), 1 / math.pi), rtol=1e-5, atol=1e-6)
 
 
+def test_scaled_gaussian_guard_matches_independent_halfspace_formula(make_dist):
+    from pydegas.semantics.truncate import truncate
+
+    # X + 2*Z > 0 for independent standard normals; Var(X + 2*Z) = 5.
+    dist = make_dist(["x"], [1.0], [[0.0]], [[[1.0]]])
+    probability, actual = truncate(dist, "x + 2*gm([1.0],[0.0],[1.0]) > 0", {}, {})
+    assert probability.item() == pytest.approx(0.5, abs=1e-6)
+    assert actual.gm.mean().item() == pytest.approx(math.sqrt(2 / (5 * math.pi)), abs=1e-6)
+    assert actual.gm.cov().item() == pytest.approx(1 - 2 / (5 * math.pi), abs=1e-6)
+
+
 def test_truncation_reweights_mixture_components(make_dist):
     from pydegas.semantics.truncate import truncate
 
