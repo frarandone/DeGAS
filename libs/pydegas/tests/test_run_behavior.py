@@ -67,11 +67,6 @@ def test_optimizer_class_matches_registered_name():
     assert [r.params["mu"] for r in by_class] == pytest.approx([r.params["mu"] for r in by_name])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="An injected optimizer instance retains its own tensors rather than the run's parameter tensors.",
-)
 def test_optimizer_instance_updates_the_run_parameters():
     from pydegas.cfg.builder import from_text
     from pydegas.optimize import OptimizationRun
@@ -81,6 +76,79 @@ def test_optimizer_instance_updates_the_run_parameters():
     run = OptimizationRun(from_text("x = _mu;"), {"mu": 1.0}, lambda d: d.gm.mean().square().sum(), optimizer=optimizer)
     result = run.step(0)
     assert result.params["mu"] == pytest.approx(0.8)
+    assert run.optimizer is optimizer
+    assert run.params["mu"] is parameter
+    assert parameter.item() == pytest.approx(0.8)
+
+
+def test_optimizer_instance_preserves_accumulated_momentum():
+    from pydegas.cfg.builder import from_text
+    from pydegas.optimize import OptimizationRun
+
+    parameter = torch.tensor(1.0, requires_grad=True)
+    optimizer = torch.optim.SGD([parameter], lr=0.1, momentum=0.9)
+    parameter.square().backward()
+    optimizer.step()
+    momentum = optimizer.state[parameter]["momentum_buffer"]
+    run = OptimizationRun(
+        from_text("x = _mu;"), {"mu": parameter.item()}, lambda d: d.gm.mean().square().sum(), optimizer
+    )
+    assert optimizer.state[parameter]["momentum_buffer"] is momentum
+    result = run.step(0)
+    assert result.params["mu"] == pytest.approx(0.46)
+    assert momentum.item() == pytest.approx(3.4)
+
+
+def test_optimizer_instance_preserves_groups_and_initializes_values():
+    from pydegas.cfg.builder import from_text
+    from pydegas.optimize import OptimizationRun
+
+    first = torch.tensor(7.0, requires_grad=True)
+    second = torch.tensor(8.0, requires_grad=True)
+    optimizer = torch.optim.SGD([{"params": [first], "lr": 0.1}, {"params": [second], "lr": 0.2}])
+    run = OptimizationRun(
+        from_text("x = _first; y = _second;"),
+        {"first": 1.0, "second": 2.0},
+        lambda d: d.gm.mean().square().sum(),
+        optimizer,
+    )
+    assert run.params["first"] is first and run.params["second"] is second
+    assert first.item() == 1.0 and second.item() == 2.0
+    assert run.step(0).params == pytest.approx({"first": 0.8, "second": 1.2})
+    assert [group["lr"] for group in optimizer.param_groups] == [0.1, 0.2]
+
+
+@pytest.mark.parametrize("kind", ["count", "vector", "frozen"])
+def test_incompatible_optimizer_instance_is_rejected_before_mutation(kind):
+    from pydegas.cfg.builder import from_text
+    from pydegas.optimize import OptimizationRun
+
+    parameter = torch.tensor([7.0] if kind == "vector" else 7.0, requires_grad=kind != "frozen")
+    optimizer = torch.optim.SGD([parameter], lr=0.1)
+    initial = {"mu": 1.0, "extra": 2.0} if kind == "count" else {"mu": 1.0}
+    with pytest.raises(ValueError, match="Optimizer"):
+        OptimizationRun(from_text("x = _mu;"), initial, lambda d: d.gm.mean().sum(), optimizer)
+    assert parameter.item() == 7.0
+
+
+def test_resolver_rejects_optimizer_with_unrelated_tensors():
+    from pydegas.optimize import resolve_optimizer
+
+    owned = torch.tensor(1.0, requires_grad=True)
+    unrelated = torch.tensor(1.0, requires_grad=True)
+    optimizer = torch.optim.SGD([owned], lr=0.1)
+    with pytest.raises(ValueError, match="must own"):
+        resolve_optimizer(optimizer, [unrelated])
+
+
+def test_lbfgs_instance_matches_registered_optimizer():
+    parameter = torch.tensor(1.0, requires_grad=True)
+    options = {"lr": 0.1, "max_iter": 3}
+    optimizer = torch.optim.LBFGS([parameter], **options)
+    expected = make_run(optimizer="LBFGS", optimizer_kwargs=options).run(2)
+    actual = make_run(optimizer=optimizer, optimizer_kwargs={}).run(2)
+    assert [result.loss for result in actual] == pytest.approx([result.loss for result in expected])
+    assert [result.params["mu"] for result in actual] == pytest.approx([result.params["mu"] for result in expected])
 
 
 def test_run_does_not_print_or_write_distribution_statistics(tmp_path, monkeypatch, capsys):

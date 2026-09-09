@@ -39,6 +39,11 @@ def resolve_optimizer(
     **kwargs: Any,
 ) -> torch.optim.Optimizer:
     if isinstance(spec, torch.optim.Optimizer):
+        owned = [parameter for group in spec.param_groups for parameter in group["params"]]
+        if len(owned) != len(parameters) or {id(parameter) for parameter in owned} != {
+            id(parameter) for parameter in parameters
+        }:
+            raise ValueError("Optimizer instance must own the supplied parameter tensors")
         if kwargs:
             logger.warning("optimizer instance supplied; ignoring kwargs=%s", kwargs)
         return spec
@@ -68,6 +73,14 @@ class StepResult:
 
 
 class OptimizationRun:
+    """An optimization with named scalar parameters.
+
+    An optimizer instance supplies the live tensors, groups and accumulated state.
+    Its tensors are matched in parameter-group order to the insertion order of
+    ``initial_params`` and initialized to those values. The run updates these
+    caller-owned tensors in place; names and classes instead create new tensors.
+    """
+
     def __init__(
         self,
         cfg: ControlFlowGraph,
@@ -83,10 +96,26 @@ class OptimizationRun:
         pruning: Literal["classic", "ranking", "kmeans"] = "classic",
     ) -> None:
         if optimizer_kwargs is None:
-            optimizer_kwargs = {"lr": 0.05}
+            optimizer_kwargs = {} if isinstance(optimizer, torch.optim.Optimizer) else {"lr": 0.05}
 
         self.cfg = cfg
-        self.params: dict[str, torch.Tensor] = initialize_params(initial_params)
+        self.params: dict[str, torch.Tensor]
+        if isinstance(optimizer, torch.optim.Optimizer):
+            parameters = [parameter for group in optimizer.param_groups for parameter in group["params"]]
+            if len(parameters) != len(initial_params) or len({id(parameter) for parameter in parameters}) != len(
+                parameters
+            ):
+                raise ValueError("Optimizer instance must contain one distinct tensor per initial parameter")
+            if any(
+                parameter.ndim != 0 or not parameter.is_leaf or not parameter.requires_grad for parameter in parameters
+            ):
+                raise ValueError("Optimizer parameters must be scalar leaf tensors with gradients enabled")
+            self.params = dict(zip(initial_params, parameters, strict=True))
+            with torch.no_grad():
+                for name, parameter in self.params.items():
+                    parameter.fill_(initial_params[name])
+        else:
+            self.params = initialize_params(initial_params)
         self.loss_fn = loss_fn
         self.optimizer: torch.optim.Optimizer = resolve_optimizer(
             optimizer, list(self.params.values()), **optimizer_kwargs
