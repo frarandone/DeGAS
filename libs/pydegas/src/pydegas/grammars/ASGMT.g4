@@ -1,9 +1,9 @@
 grammar ASGMT;
 
-assignment: symvars '=' add;
+assignment: symvars '=' add EOF;
 
 add: add_term (('+')? add_term)*?;
-add_term: (term '*')? term;
+add_term: term ('*' term)*;
 
 term: NUM | sub? par | sub? symvars | sub? gm;
 symvars : IDV | idd;

@@ -12,10 +12,11 @@ from typing import Any
 import torch
 from antlr4 import CommonTokenStream, InputStream, ParseTreeWalker
 
-from pydegas.exceptions import SemanticError
+from pydegas.exceptions import SemanticError, SyntaxParseError
 from pydegas.mixtures.distribution import Dist, extend_dist
 from pydegas.mixtures.gaussian_mix import GaussianMix
 from pydegas.parse.asgmt import ASGMTLexer, ASGMTListener, ASGMTParser
+from pydegas.parse.values import unpack_gm_list
 
 
 ASGMT_TREE_CACHE: dict[str, Any] = {}
@@ -54,23 +55,50 @@ class AsgmtRule(ASGMTListener):
         self.linear_coefficients: torch.Tensor | None = None
         self.linear_constant: torch.Tensor | None = None
         self.product_indices: list[int] | None = None
+        self.product_coefficient = torch.tensor(1.0)
+
+    def _data_index(self, ctx: ASGMTParser.IddContext) -> int:
+        if ctx.NUM() is not None:
+            return int(ctx.NUM().getText())
+        return int(self.data[ctx.IDV(1).getText()][0].item())
+
+    def _variable_name(self, ctx: ASGMTParser.SymvarsContext) -> str:
+        if ctx.idd() is None:
+            return ctx.getText()
+        indexed = ctx.idd()
+        return f"{indexed.IDV(0).getText()}[{self._data_index(indexed)}]"
+
+    def _is_variable(self, term: ASGMTParser.TermContext) -> bool:
+        if term.gm() is not None:
+            return True
+        if term.symvars() is None:
+            return False
+        indexed = term.symvars().idd()
+        return indexed is None or indexed.IDV(0).getText() not in self.data
+
+    def _constant_value(self, term: ASGMTParser.TermContext) -> torch.Tensor:
+        if term.NUM() is not None:
+            return torch.tensor(float(term.NUM().getText()))
+        if term.par() is not None:
+            return self.parameters[term.par().IDV().getText()]
+        indexed = term.symvars().idd()
+        return torch.as_tensor(self.data[indexed.IDV(0).getText()][self._data_index(indexed)])
 
     def collect_gm_term(self, term: ASGMTParser.TermContext) -> None:
         """Append the weights, means, and variances of a ``gm(π, μ, σ)`` term."""
         gm_ctx = term.gm()
-        self.aux_pis.append(gm_ctx.list_(0).unpack(self.parameters))
-        self.aux_means.append(gm_ctx.list_(1).unpack(self.parameters))
-        self.aux_covs.append(torch.pow(gm_ctx.list_(2).unpack(self.parameters), 2))
+        self.aux_pis.append(unpack_gm_list(gm_ctx.list_(0), self.parameters))
+        self.aux_means.append(unpack_gm_list(gm_ctx.list_(1), self.parameters))
+        self.aux_covs.append(unpack_gm_list(gm_ctx.list_(2), self.parameters).square())
 
     def enterAssignment(self, ctx: ASGMTParser.AssignmentContext) -> None:
-        self.target_index = self.variables.index(ctx.symvars().getVar(self.data))
+        self.target_index = self.variables.index(self._variable_name(ctx.symvars()))
 
     def enterAdd(self, ctx: ASGMTParser.AddContext) -> None:
-        # Detect product: a single add_term whose two sub-terms are both variables
-        if len(ctx.add_term()) == 1 and len(ctx.add_term(0).term()) == 2:
-            self.is_product = 1
-            for term in ctx.add_term(0).term():
-                self.is_product = self.is_product * term.is_var(self.data)
+        variable_counts = [sum(self._is_variable(term) for term in summand.term()) for summand in ctx.add_term()]
+        self.is_product = len(variable_counts) == 1 and variable_counts[0] == 2
+        if not self.is_product and any(count > 1 for count in variable_counts):
+            raise SemanticError("Assignments support affine expressions or a single product of two random variables")
         if self.is_product:
             self.product_indices = []
         else:
@@ -81,13 +109,17 @@ class AsgmtRule(ASGMTListener):
         if self.is_product:
             # Product of two variables (or one variable × one gm term)
             for term in ctx.term():
-                if term.gm() is not None:
+                if term.sub() is not None:
+                    self.product_coefficient = -self.product_coefficient
+                if not self._is_variable(term):
+                    self.product_coefficient = self.product_coefficient * self._constant_value(term)
+                elif term.gm() is not None:
                     self.collect_gm_term(term)
                     assert self.product_indices is not None
                     self.product_indices.append(len(self.variables) + len(self.aux_pis) - 1)
                 elif term.symvars() is not None:
                     assert self.product_indices is not None
-                    self.product_indices.append(self.variables.index(term.symvars().getVar(self.data)))
+                    self.product_indices.append(self.variables.index(self._variable_name(term.symvars())))
             self.update_func = partial(mul_func, self)
         else:
             # Linear combination - collect the coefficient for this term
@@ -100,10 +132,10 @@ class AsgmtRule(ASGMTListener):
                 else:
                     coefficient = 1 * coefficient
 
-                if term.is_const(self.data):
-                    coefficient = coefficient * term.getValue(self.data, self.parameters)
+                if not self._is_variable(term):
+                    coefficient = coefficient * self._constant_value(term)
                 elif term.symvars() is not None:
-                    variable_index = self.variables.index(term.symvars().getVar(self.data))
+                    variable_index = self.variables.index(self._variable_name(term.symvars()))
                 elif term.gm() is not None:
                     self.collect_gm_term(term)
                     assert self.linear_coefficients is not None
@@ -112,7 +144,7 @@ class AsgmtRule(ASGMTListener):
             assert self.linear_coefficients is not None and self.linear_constant is not None
             if variable_index is not None:
                 if variable_index < len(self.linear_coefficients):
-                    self.linear_coefficients[variable_index] = coefficient
+                    self.linear_coefficients[variable_index] = self.linear_coefficients[variable_index] + coefficient
                 else:
                     self.linear_coefficients = torch.hstack([self.linear_coefficients, coefficient])
             else:
@@ -164,10 +196,11 @@ def add_func(rule: AsgmtRule, distribution: Dist) -> Dist:
 
 
 def mul_func(rule: AsgmtRule, distribution: Dist) -> Dist:
-    """Product update: ``x_i = x_j · x_k`` (second-order Gaussian approximation)."""
+    """Product update: ``x_i = a · x_j · x_k`` (second-order Gaussian approximation)."""
     assert rule.target_index is not None and rule.product_indices is not None
     target = rule.target_index
     j, k = rule.product_indices
+    coefficient = rule.product_coefficient
     original_dim = distribution.gm.n_dim()
 
     # STEP 1: considers all possible combinations of components of the auxiliary variables
@@ -175,14 +208,14 @@ def mul_func(rule: AsgmtRule, distribution: Dist) -> Dist:
 
     # STEP 2: computes mean and covariance matrix for the extended component
     new_means = torch.clone(extended_gm.mu)
-    new_means[:, target] = extended_gm.sigma[:, j, k] + extended_gm.mu[:, j] * extended_gm.mu[:, k]
+    new_means[:, target] = coefficient * (extended_gm.sigma[:, j, k] + extended_gm.mu[:, j] * extended_gm.mu[:, k])
 
     new_covariances = torch.clone(extended_gm.sigma)
-    new_covariances[:, target, :] = new_covariances[:, :, target] = (
+    new_covariances[:, target, :] = new_covariances[:, :, target] = coefficient * (
         extended_gm.mu[:, j].reshape(-1, 1) * extended_gm.sigma[:, k, :]
         + extended_gm.mu[:, k].reshape(-1, 1) * extended_gm.sigma[:, j, :]
     )
-    new_covariances[:, target, target] = (
+    new_covariances[:, target, target] = coefficient.square() * (
         torch.pow(extended_gm.sigma[:, j, k], 2)
         + 2 * extended_gm.sigma[:, j, k] * extended_gm.mu[:, j] * extended_gm.mu[:, k]
         + extended_gm.sigma[:, j, j] * extended_gm.sigma[:, k, k]
@@ -228,7 +261,10 @@ def parse_assignment(
         lexer = ASGMTLexer(InputStream(expression))
         stream = CommonTokenStream(lexer)
         parser = ASGMTParser(stream)
-        ASGMT_TREE_CACHE[expression] = parser.assignment()
+        tree = parser.assignment()
+        if parser.getNumberOfSyntaxErrors() > 0:
+            raise SyntaxParseError(f"Invalid assignment syntax: {expression!r}")
+        ASGMT_TREE_CACHE[expression] = tree
 
     rule = AsgmtRule(variables, data, parameters)
     try:
