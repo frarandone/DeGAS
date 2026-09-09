@@ -117,18 +117,59 @@ def test_equality_conditioning_of_correlated_gaussian(make_dist):
     assert actual.gm.cov()[0, 1].item() == pytest.approx(0.0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="Equality conditioning does not reweight mixture components by the observation likelihood.",
-)
 def test_equality_conditioning_updates_mixture_weights(make_dist):
     from pydegas.semantics.truncate import truncate
 
+    dist = make_dist(
+        ["x", "y"],
+        [0.25, 0.75],
+        [[-1.0, 0.0], [1.0, 10.0]],
+        [[[1.0, 0.0], [0.0, 1.0]], [[4.0, 0.0], [0.0, 1.0]]],
+    )
+    density, actual = truncate(dist, "x == 2", {}, {})
+    weights = torch.tensor([0.25 * NormalDist(-1, 1).pdf(2), 0.75 * NormalDist(1, 2).pdf(2)])
+    torch.testing.assert_close(actual.gm.pi.flatten(), weights / weights.sum())
+    assert density.item() == pytest.approx(weights.sum().item())
+    assert actual.gm.mean()[1].item() == pytest.approx((10 * weights[1] / weights.sum()).item())
+
+
+def test_equality_conditioning_preserves_univariate_components(make_dist):
+    from pydegas.semantics.truncate import truncate
+
+    dist = make_dist(["x"], [1.0], [[0.0]], [[[1.0]]])
+    density, actual = truncate(dist, "x == 2", {}, {})
+    assert density.item() == pytest.approx(NormalDist().pdf(2))
+    assert actual.gm.pi.item() == pytest.approx(1.0)
+    assert actual.gm.mean().item() == pytest.approx(2.0)
+
+
+def test_equality_conditioning_keeps_zero_conditional_covariance(make_dist):
+    from pydegas.semantics.truncate import truncate
+
+    dist = make_dist(["x", "y"], [1.0], [[0.0, 0.0]], [[[1.0, 2.0], [2.0, 4.0]]])
+    _, actual = truncate(dist, "x == 1", {}, {})
+    assert actual.gm.pi.item() == pytest.approx(1.0)
+    assert actual.gm.mean()[1].item() == pytest.approx(2.0)
+    assert actual.gm.cov()[1, 1].item() == pytest.approx(0.0)
+
+
+def test_equality_posterior_remains_normalized_in_the_tail(make_dist):
+    from pydegas.semantics.truncate import truncate
+
+    dist = make_dist(["x"], [0.25, 0.75], [[0.0], [0.0]], [[[1.0]], [[1.0]]])
+    _, actual = truncate(dist, "x == 60", {}, {})
+    torch.testing.assert_close(actual.gm.pi, dist.gm.pi, rtol=1e-4, atol=1e-5)
+
+
+def test_equality_posterior_weights_retain_parameter_gradients(make_dist):
+    from pydegas.semantics.truncate import truncate
+
+    observation = torch.tensor(0.5, requires_grad=True)
     dist = make_dist(["x", "y"], [0.5, 0.5], [[-1.0, 0.0], [1.0, 10.0]], [[[1.0, 0.0], [0.0, 1.0]]] * 2)
-    _, actual = truncate(dist, "x == 2", {}, {})
-    likelihoods = torch.tensor([NormalDist(-1, 1).pdf(2), NormalDist(1, 1).pdf(2)])
-    torch.testing.assert_close(actual.gm.pi.flatten(), likelihoods / likelihoods.sum())
+    _, actual = truncate(dist, "x == _observation", {}, {"observation": observation})
+    gradient = torch.autograd.grad(actual.gm.mean()[1], observation)[0]
+    posterior = 1 / (1 + math.exp(-1))
+    assert gradient.item() == pytest.approx(20 * posterior * (1 - posterior), rel=1e-5)
 
 
 def test_truncation_gradients_match_analytical_half_normal():
