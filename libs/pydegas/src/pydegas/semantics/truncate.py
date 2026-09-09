@@ -173,11 +173,16 @@ def _eq_func(rule: TruncRule, distribution: Dist) -> tuple[torch.Tensor, Dist]:
         * distribution.gm.sigma[:, unobserved_mask, observed_index]
     )
 
-    # if conditioned matrix is Null, it is equivalent to observing a single independent component
-    all_zeros = torch.all(conditional_covariance == 0, dim=(1, 2))
-    new_weights = torch.where(all_zeros, 0.0, distribution.gm.pi.flatten()).view(-1, 1)
-    # normalizes weights
-    normalizer, normalized_weights = _normalize_weights(new_weights)
+    # Bayes' rule weights each component by the marginal observation density.
+    # Normalize in log space so rare observations still yield a valid posterior.
+    observed = distributions.Normal(
+        distribution.gm.mu[:, observed_index],
+        distribution.gm.sigma[:, observed_index, observed_index].sqrt(),
+    )
+    log_weights = distribution.gm.pi.flatten().log() + observed.log_prob(equality_constant)
+    log_normalizer = torch.logsumexp(log_weights, dim=0)
+    normalizer = log_normalizer.exp()
+    normalized_weights = (log_weights - log_normalizer).exp().view(-1, 1)
 
     # extends cond mu and sigma with values for the observed variable (puts small variance on the observed variable)
     n_unobserved = conditional_mean.shape[1]
