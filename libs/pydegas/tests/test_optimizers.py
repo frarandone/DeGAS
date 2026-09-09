@@ -16,7 +16,7 @@ for i in range(5) {
 """
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def cfg():
     from pydegas.cfg.builder import from_text
     from pydegas.cfg.smoother import smooth
@@ -56,3 +56,5 @@ def test_optimizer_runs_3_steps(cfg, loss_fn, optimizer_name) -> None:
         assert torch.isfinite(torch.tensor(s.loss)), f"{optimizer_name}: non-finite loss at step {s.step}"
         assert "mu" in s.params, f"{optimizer_name}: param 'mu' missing at step {s.step}"
         assert torch.isfinite(torch.tensor(s.params["mu"])), f"{optimizer_name}: non-finite param at step {s.step}"
+    assert steps[-1].loss < steps[0].loss, f"{optimizer_name}: loss did not decrease"
+    assert steps[-1].params["mu"] != pytest.approx(1.0), f"{optimizer_name}: parameter did not change"
