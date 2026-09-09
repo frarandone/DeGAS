@@ -289,6 +289,8 @@ class TruncRule(TRUNCListener):
 
     def enterAnd_trunc(self, ctx: TRUNCParser.And_truncContext) -> None:
         variable_name = ctx.IDV()[0].getText()
+        if ctx.IDV()[1].getText() != variable_name:
+            raise InvalidConstraintError("Compound guards must constrain the same variable")
         variable_index = self.variables.index(variable_name)
         self.coefficients[variable_index] = torch.tensor(1.0)
         for inop, const_expr in zip(ctx.inop(), ctx.const_expr(), strict=False):
@@ -302,6 +304,8 @@ class TruncRule(TRUNCListener):
 
     def enterOr_trunc(self, ctx: TRUNCParser.Or_truncContext) -> None:
         variable_name = ctx.IDV()[0].getText()
+        if ctx.IDV()[1].getText() != variable_name:
+            raise InvalidConstraintError("Compound guards must constrain the same variable")
         variable_index = self.variables.index(variable_name)
         self.coefficients[variable_index] = torch.tensor(1.0)
         for inop, const_expr in zip(ctx.inop(), ctx.const_expr(), strict=False):
