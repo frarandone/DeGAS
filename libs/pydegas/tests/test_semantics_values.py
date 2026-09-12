@@ -133,6 +133,17 @@ def test_equality_conditioning_updates_mixture_weights(make_dist):
     assert actual.gm.mean()[1].item() == pytest.approx((10 * weights[1] / weights.sum()).item())
 
 
+def test_equality_conditioning_accepts_a_constant_from_a_data_array(make_dist):
+    """A ``data`` element reaches the listener as a float, not a tensor."""
+    from pydegas.semantics.truncate import truncate
+
+    dist = make_dist(["x"], [1.0], [[0.0]], [[[1.0]]])
+    observations = {"obs": [2.0, 3.0]}
+    density, actual = truncate(dist, "x == obs[0]", observations, {})
+    assert density.item() == pytest.approx(NormalDist().pdf(2))
+    assert actual.gm.mean().item() == pytest.approx(2.0)
+
+
 def test_equality_conditioning_preserves_univariate_components(make_dist):
     from pydegas.semantics.truncate import truncate
 
