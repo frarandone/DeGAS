@@ -48,7 +48,7 @@ def test_exact_helper_rewriting_matches_reference(reference, helper):
     assert compile_to_soga_text(program, seed=0) == reference.preprocessor.compile2SOGA_text(program)
 
 
-@pytest.mark.parametrize("condition", ["x > 0", "x < 1", "x + y > 0", "x > -1 and x < 1", "x < -1 or x > 1", "x == 0"])
+@pytest.mark.parametrize("condition", ["x > 0", "x < 1", "x + y > 0", "x > -1 and x < 1", "x < -1 or x > 1"])
 def test_truncation_mass_and_components_match_reference(reference, make_dist, assert_same_distribution, condition):
     from pydegas.semantics.truncate import truncate
 
@@ -64,6 +64,21 @@ def test_truncation_mass_and_components_match_reference(reference, make_dist, as
     actual_mass, actual = truncate(make_dist(*args), condition, {}, {})
     torch.testing.assert_close(actual_mass, expected_mass, rtol=1e-5, atol=1e-6)
     assert_same_distribution(actual, expected)
+
+
+def test_equality_reweights_components_unlike_reference(reference, make_dist):
+    from statistics import NormalDist
+
+    from pydegas.semantics.truncate import truncate
+
+    args = (["x", "y"], [0.5, 0.5], [[-1.0, 0.0], [1.0, 10.0]], [[[1.0, 0.0], [0.0, 1.0]]] * 2)
+    _, old = reference.truncate.truncate(make_dist(*args, implementation=reference.shared), "x == 2", {}, {})
+    _, new = truncate(make_dist(*args), "x == 2", {}, {})
+    likelihoods = torch.tensor([NormalDist(-1, 1).pdf(2), NormalDist(1, 1).pdf(2)])
+    torch.testing.assert_close(old.gm.pi.flatten(), torch.tensor([0.5, 0.5]))
+    torch.testing.assert_close(new.gm.pi.flatten(), likelihoods / likelihoods.sum())
+    torch.testing.assert_close(new.gm.mu, old.gm.mu)
+    torch.testing.assert_close(new.gm.sigma, old.gm.sigma)
 
 
 @pytest.mark.parametrize("strategy", ["classic", "ranking", "kmeans"])
