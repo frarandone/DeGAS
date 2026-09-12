@@ -140,14 +140,17 @@ class GaussianMix:
         self.sigma = self.sigma[indexes[0], :, :]
 
     def sample(self, n_samples: int = 1) -> torch.Tensor:
-        weights = self.pi.squeeze()
-        mus = self.mu.squeeze()
-        covs = self.sigma.squeeze()
-        _, d = mus.shape
+        weights = self.pi.reshape(-1)
+        mus = self.mu
+        covs = self.sigma
+        d = self.n_dim()
         categorical = Categorical(weights)
+        if n_samples == 0:
+            return mus.new_empty((0, d))
         component_ids = categorical.sample((n_samples,))
+        jitter = 1e-6 * torch.eye(d, dtype=covs.dtype, device=covs.device)
         samples = []
         for k in component_ids:
-            dist = MultivariateNormal(mus[k], covs[k] + 1e-6 * torch.eye(d))
+            dist = MultivariateNormal(mus[k], covs[k] + jitter)
             samples.append(dist.sample())
         return torch.stack(samples)

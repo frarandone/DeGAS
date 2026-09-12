@@ -65,11 +65,9 @@ def test_nll_stays_finite_in_extreme_tail(make_dist):
     assert actual.item() == pytest.approx(3600 + math.log(2 * math.pi), abs=3e-4)
 
 
-@pytest.mark.parametrize("components, dimensions", [(1, 1), (1, 2), (2, 1)])
-@pytest.mark.xfail(
-    strict=True, raises=ValueError, reason="GaussianMix.sample squeezes away singleton component/dimension axes."
-)
-def test_sampling_preserves_singleton_dimensions(make_dist, components, dimensions):
+@pytest.mark.parametrize("components, dimensions", [(1, 1), (1, 2), (2, 1), (2, 2)])
+@pytest.mark.parametrize("n_samples", [0, 1, 4])
+def test_sampling_preserves_singleton_dimensions(make_dist, components, dimensions, n_samples):
     dist = make_dist(
         [f"x{i}" for i in range(dimensions)],
         [1 / components] * components,
@@ -78,6 +76,16 @@ def test_sampling_preserves_singleton_dimensions(make_dist, components, dimensio
     )
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(0)
-        samples = dist.gm.sample(4)
-    assert samples.shape == (4, dimensions)
+        samples = dist.gm.sample(n_samples)
+    assert samples.shape == (n_samples, dimensions)
     assert torch.isfinite(samples).all()
+
+
+def test_sampling_preserves_distribution_dtype(make_dist):
+    dist = make_dist(["x"], [1.0], [[2.0]], [[[1.0]]])
+    dist.gm.pi = dist.gm.pi.double()
+    dist.gm.mu = dist.gm.mu.double()
+    dist.gm.sigma = dist.gm.sigma.double()
+    samples = dist.gm.sample()
+    assert samples.shape == (1, 1)
+    assert samples.dtype == torch.float64
