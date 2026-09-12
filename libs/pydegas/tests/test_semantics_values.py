@@ -154,13 +154,11 @@ def test_coefficient_product_keeps_both_variables():
     assert dist.gm.mean()[dist.var_list.index("x")].item() == pytest.approx(12.0)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="The direct TRUNC listener treats both sides of a compound guard as the first variable."
-)
-def test_two_variable_compound_guard_is_rejected(make_dist):
+@pytest.mark.parametrize("condition", ["x > 0 and y < 1", "y < 1 and x > 0", "x < 0 or y > 1", "y > 1 or x < 0"])
+def test_two_variable_compound_guard_is_rejected(make_dist, condition):
     from pydegas.exceptions import InvalidConstraintError
     from pydegas.semantics.truncate import truncate
 
     dist = make_dist(["x", "y"], [1.0], [[0.0, 0.0]], [[[1.0, 0.0], [0.0, 1.0]]])
-    with pytest.raises(InvalidConstraintError):
-        truncate(dist, "x > 0 and y < 1", {}, {})
+    with pytest.raises(InvalidConstraintError, match="same variable"):
+        truncate(dist, condition, {}, {})
