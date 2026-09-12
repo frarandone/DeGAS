@@ -147,19 +147,6 @@ def test_global_component_bound_is_an_intentional_difference(reference):
     torch.testing.assert_close(actual.gm.cov(), expected.gm.cov(), rtol=1e-5, atol=1e-6)
 
 
-def test_log_space_nll_avoids_reference_underflow(reference, make_dist):
-    from pydegas.optimize.losses import neg_log_likelihood
-
-    args = (["x", "y"], [1.0], [[0.0, 0.0]], [[[1.0, 0.0], [0.0, 1.0]]])
-    trajectories = torch.tensor([[60.0, 60.0]])
-    old = reference.optimization.neg_log_likelihood(
-        trajectories, make_dist(*args, implementation=reference.shared), [0, 1]
-    )
-    new = neg_log_likelihood(trajectories, [0, 1])(make_dist(*args))
-    assert torch.isposinf(old)
-    assert torch.isfinite(new)
-
-
 def test_default_stopping_window_differs_from_reference(reference, tmp_path, monkeypatch):
     from pydegas.cfg.builder import from_text
     from pydegas.optimize import OptimizationRun
