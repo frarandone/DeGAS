@@ -150,7 +150,10 @@ def _ineq_func(rule: TruncRule, distribution: Dist) -> tuple[torch.Tensor, Dist]
 def _eq_func(rule: TruncRule, distribution: Dist) -> tuple[torch.Tensor, Dist]:
     """Truncate by an equality observation ``var == c`` (Bayesian conditioning)."""
     equality_coefficients = rule.coefficients
-    equality_constant = rule.constant
+    # A constant read from a program's ``data`` array arrives as a plain float;
+    # the component weighting below evaluates a distribution's log-density at it,
+    # which requires a tensor.
+    equality_constant = torch.as_tensor(rule.constant, dtype=distribution.gm.mu.dtype)
 
     # here there was a part to deal with deltas, but we removed it because in torch everything is differentiable
 
