@@ -145,7 +145,6 @@ def test_truncation_gradients_match_analytical_half_normal():
     assert mean_gradient.item() == pytest.approx(1 - 2 / math.pi, abs=1e-6)
 
 
-@pytest.mark.xfail(strict=True, reason="Inherited assignment parser drops the third factor in 2*y*z.")
 def test_coefficient_product_keeps_both_variables():
     from pydegas.cfg.builder import from_text
     from pydegas.semantics.engine import start_soga

@@ -61,8 +61,9 @@ def _format_float_list(items: list[str]) -> str:
     return "[" + ", ".join(items) + "]"
 
 
-def _expr_is_prod(expr: str, variables: list[str]) -> bool:
+def _expr_is_prod(expr: str, variables: list[str], data: dict) -> bool:
     """Return True if *expr* is a product of exactly two variables."""
+    variables = [name for name in variables if not name.startswith("_") and name.split("[")[0] not in data]
     if len(variables) != 2:
         return False
     v1, v2 = variables
@@ -144,7 +145,7 @@ def _smooth_assignment(
 
     # Case 3 - deterministic function of other variables (no gm term)
     if variables and not gm_vars:
-        if not _expr_is_prod(orig_expr, variables) and target_var not in variables:
+        if not _expr_is_prod(orig_expr, variables, data) and target_var not in variables:
             new_expr = orig_expr + f"+ gm([1.], [0.], [{eps:.10f}])"
 
     if new_expr:
