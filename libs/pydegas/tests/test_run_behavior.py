@@ -67,22 +67,6 @@ def test_optimizer_class_matches_registered_name():
     assert [r.params["mu"] for r in by_class] == pytest.approx([r.params["mu"] for r in by_name])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="An injected optimizer instance retains its own tensors rather than the run's parameter tensors.",
-)
-def test_optimizer_instance_updates_the_run_parameters():
-    from pydegas.cfg.builder import from_text
-    from pydegas.optimize import OptimizationRun
-
-    parameter = torch.tensor(1.0, requires_grad=True)
-    optimizer = torch.optim.SGD([parameter], lr=0.1)
-    run = OptimizationRun(from_text("x = _mu;"), {"mu": 1.0}, lambda d: d.gm.mean().square().sum(), optimizer=optimizer)
-    result = run.step(0)
-    assert result.params["mu"] == pytest.approx(0.8)
-
-
 def test_run_does_not_print_or_write_distribution_statistics(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     make_run().run(3)

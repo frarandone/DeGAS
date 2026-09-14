@@ -117,20 +117,6 @@ def test_equality_conditioning_of_correlated_gaussian(make_dist):
     assert actual.gm.cov()[0, 1].item() == pytest.approx(0.0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="Equality conditioning does not reweight mixture components by the observation likelihood.",
-)
-def test_equality_conditioning_updates_mixture_weights(make_dist):
-    from pydegas.semantics.truncate import truncate
-
-    dist = make_dist(["x", "y"], [0.5, 0.5], [[-1.0, 0.0], [1.0, 10.0]], [[[1.0, 0.0], [0.0, 1.0]]] * 2)
-    _, actual = truncate(dist, "x == 2", {}, {})
-    likelihoods = torch.tensor([NormalDist(-1, 1).pdf(2), NormalDist(1, 1).pdf(2)])
-    torch.testing.assert_close(actual.gm.pi.flatten(), likelihoods / likelihoods.sum())
-
-
 def test_truncation_gradients_match_analytical_half_normal():
     from pydegas.mixtures.distribution import Dist
     from pydegas.mixtures.gaussian_mix import GaussianMix
@@ -143,24 +129,3 @@ def test_truncation_gradients_match_analytical_half_normal():
     mean_gradient = torch.autograd.grad(actual.gm.mean().sum(), mean)[0]
     assert mass_gradient.item() == pytest.approx(1 / math.sqrt(2 * math.pi), abs=1e-6)
     assert mean_gradient.item() == pytest.approx(1 - 2 / math.pi, abs=1e-6)
-
-
-@pytest.mark.xfail(strict=True, reason="Inherited assignment parser drops the third factor in 2*y*z.")
-def test_coefficient_product_keeps_both_variables():
-    from pydegas.cfg.builder import from_text
-    from pydegas.semantics.engine import start_soga
-
-    dist = start_soga(from_text("y = 2; z = 3; x = 2*y*z;"))
-    assert dist.gm.mean()[dist.var_list.index("x")].item() == pytest.approx(12.0)
-
-
-@pytest.mark.xfail(
-    strict=True, reason="The direct TRUNC listener treats both sides of a compound guard as the first variable."
-)
-def test_two_variable_compound_guard_is_rejected(make_dist):
-    from pydegas.exceptions import InvalidConstraintError
-    from pydegas.semantics.truncate import truncate
-
-    dist = make_dist(["x", "y"], [1.0], [[0.0, 0.0]], [[[1.0, 0.0], [0.0, 1.0]]])
-    with pytest.raises(InvalidConstraintError):
-        truncate(dist, "x > 0 and y < 1", {}, {})

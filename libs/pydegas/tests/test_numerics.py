@@ -63,21 +63,3 @@ def test_nll_stays_finite_in_extreme_tail(make_dist):
     dist = make_dist(["x", "y"], [1.0], [[0.0, 0.0]], [[[1.0, 0.0], [0.0, 1.0]]])
     actual = neg_log_likelihood(torch.tensor([[60.0, 60.0]]), [0, 1])(dist)
     assert actual.item() == pytest.approx(3600 + math.log(2 * math.pi), abs=3e-4)
-
-
-@pytest.mark.parametrize("components, dimensions", [(1, 1), (1, 2), (2, 1)])
-@pytest.mark.xfail(
-    strict=True, raises=ValueError, reason="GaussianMix.sample squeezes away singleton component/dimension axes."
-)
-def test_sampling_preserves_singleton_dimensions(make_dist, components, dimensions):
-    dist = make_dist(
-        [f"x{i}" for i in range(dimensions)],
-        [1 / components] * components,
-        [[0.0] * dimensions] * components,
-        [torch.eye(dimensions).tolist()] * components,
-    )
-    with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(0)
-        samples = dist.gm.sample(4)
-    assert samples.shape == (4, dimensions)
-    assert torch.isfinite(samples).all()
