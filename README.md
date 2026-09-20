@@ -18,6 +18,56 @@ An example of the complete pipeline can be found in the notebook `src/Thermostat
 
 Below we detail every step and what are the available function in the `optimization` module.
 
+## Running the web application locally
+
+The repository ships the full stack (the React user interface, the FastAPI
+service and Redis) as Docker containers. Two things must be installed:
+
+- [Docker Desktop](https://docs.docker.com/get-started/get-docker/) (Windows,
+  macOS) or Docker Engine with the Compose plugin (Linux). On Windows, enable
+  the WSL 2 backend and run the commands from a WSL shell.
+- [just](https://github.com/casey/just#installation), a command runner.
+
+Then, from the root of the repository:
+
+```
+just up
+```
+
+The first run builds the images and takes a few minutes; later runs start in
+seconds. When it finishes it prints the address:
+
+```
+ready:  http://localhost:3000
+        http://localhost:3000/docs
+```
+
+Open the first in a browser for the user interface, the second for the API
+documentation. Use `localhost`, not `127.0.0.1`: the service accepts only the
+former as a host name.
+
+The other commands:
+
+| Command | What it does |
+|---|---|
+| `just up` | build if needed, start, wait until the application answers |
+| `just down` | stop the containers; saved sessions are kept |
+| `just status` | show the containers and check the endpoints |
+| `just logs` | follow the logs; `Ctrl+C` stops following, not the stack |
+| `just rebuild` | rebuild the images from scratch after pulling changes |
+| `just reset` | stop the stack and delete the stored sessions as well |
+
+Running `just` on its own lists them all.
+
+If the application does not come up, `just status` shows whether each container
+is running and whether the endpoints answer, and `just logs` shows why a
+container failed. Port 3000 must be free.
+
+The recipes default to the local configuration. On a server where Caddy
+terminates TLS and routes `/api`, prefix any of them with `prod`
+(`just prod up`, `just prod logs`), which starts the same services without the
+local routing overlay.
+
 ## Writing and compiling a program
 
 To use DeGAS your model must be written in the SOGA syntax. You can find examples of programs written in this syntax in `programs/SOGA/Optimization`. Here we give a short recap of the accepted syntax.
@@ -29,7 +79,7 @@ At the beginning of your file you can declare data. These are arrays that can be
 
 can be accessed at any point of the program using `obs[i]` where `i` is an integer index (indexing starts from 0).
 
-NOTE: currently the SOGA syntax does not support index arithmetic. Arrays and data can only be accessed using a single variable or a number, not expressions such as `i+1`. 
+NOTE: currently the SOGA syntax does not support index arithmetic. Arrays and data can only be accessed using a single variable or a number, not expressions such as `i+1`.
 
 #### Instructions
 
@@ -37,7 +87,7 @@ The SOGA syntax accepted by DeGAS supports 4 types of instruction: assignments, 
 
 In the following:
 
--  `var` is any variable name. You do not need to declare scalar variables in advance, as DeGAS infers them automatically when parsing the program. For array variables declare `array[size] var` before using the array, for example `array[10] y;`. Array values are accessed using the usual notation `var[i]` where `i` is an integer index ;  
+-  `var` is any variable name. You do not need to declare scalar variables in advance, as DeGAS infers them automatically when parsing the program. For array variables declare `array[size] var` before using the array, for example `array[10] y;`. Array values are accessed using the usual notation `var[i]` where `i` is an integer index ;
 
 -  `const` is either a constant (i.e. a number), a data value or a parameter;
 
@@ -91,7 +141,7 @@ Examples of parameter usage are:
 #### Compiling a program to a smooth CFG
 
 To compile the program to a CFG object the following instructions must be used:
- 
+
 ```
 compiledFile = compile2SOGA('path_to_file.soga')
 cfg = produce_cfg(compiledFile)
@@ -114,7 +164,7 @@ The module `optimization` contains the function `initialize_params` that takes a
 
 For performing optimization you must specify the loss to be minimized.
 
-A loss is function taking as input an object Dist representing a Gaussian Mixture distribution and returning a scalar value. However, it can depend on different arguments.  
+A loss is function taking as input an object Dist representing a Gaussian Mixture distribution and returning a scalar value. However, it can depend on different arguments.
 
 For example, the module `optimization` contains the loss `neg_log_likelihhod` defined as
 
@@ -236,7 +286,7 @@ optimizer = torch.optim.Adam([params_dict[key] for key in params_dict.keys()], l
 
 for i in range(n_steps):
 	optimizer.zero_grad() # Reset gradients
-	
+
 	# loss computation
 	current_dist = start_SOGA(cfg, params_dict) # computes the output distribution for the current values of the parameters stored in params_dict
 	loss = loss_func(current_dist) # computes loss using a user-defined loss function
@@ -244,7 +294,7 @@ for i in range(n_steps):
 	# checks user-defined stopping criterion
 	if stopping_criterion(loss):
 		break
-		
+
 	# backpropagates
 	loss.backward()
 
