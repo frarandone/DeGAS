@@ -10,8 +10,34 @@ from libSOGA import *
 # The function optimize performs the optimization of the parameters using the Adam optimizer.
 def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=True):
 
+    # Standard deviations (params named "sigma...") are reparameterized as sigma = exp(raw)
+    # and optimized in log-space. Two reasons: (1) it structurally guarantees sigma stays
+    # strictly positive -- unconstrained Adam can otherwise walk it negative, which is
+    # physically meaningless; (2) the likelihood of a Gaussian-mixture component is unbounded
+    # as sigma -> 0+ (a real MLE singularity, not a bug -- see PROGRAMS/likelihood.py's module
+    # docstring), so unconstrained optimization can chase arbitrarily tiny sigma to inflate
+    # likelihood on a specific data point rather than genuinely fitting the distribution. In
+    # log-space, d(loss)/d(raw) = d(loss)/d(sigma) * sigma, so the effective gradient shrinks
+    # as sigma shrinks -- a self-damping effect that makes collapsing to a near-degenerate
+    # sigma within a fixed step budget much harder, without capping how small a genuinely
+    # well-supported sigma can end up. A sigma that starts EXACTLY at 0.0 is left untouched
+    # (log(0) is undefined) -- that's DeGAS's own deliberate discrete/point-mass convention
+    # (see sogaPreprocessor.py's compileBernoulli), which already receives no gradient at all
+    # via PROGRAMS/likelihood.py's delta-branch handling, so there is nothing to reparameterize.
+    raw_sigma = {}
+    for key, value in params_dict.items():
+        if key.startswith("sigma") and value.item() > 0:
+            raw_sigma[key] = torch.log(value.detach().clone()).requires_grad_(True)
+
+    def sync_reparameterized_sigmas():
+        for key, raw in raw_sigma.items():
+            params_dict[key] = torch.exp(raw)
+
+    sync_reparameterized_sigmas()
+
     # creates the optimizer, passing the parameters of the program as the parameters to optimize
-    optimizer = torch.optim.Adam([params_dict[key] for key in params_dict.keys()], lr=lr)
+    trainable = [raw_sigma[key] if key in raw_sigma else params_dict[key] for key in params_dict.keys()]
+    optimizer = torch.optim.Adam(trainable, lr=lr)
 
     total_start = time()
     loss_list = []
@@ -47,6 +73,9 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=T
 
         # Update parameters
         optimizer.step()
+        sync_reparameterized_sigmas()  # rebuild params_dict's sigma entries as exp(raw) from
+        # the just-stepped raw leaves, so the next iteration's start_SOGA call (and, if this
+        # was the last iteration, the caller) sees the updated positive sigma values
 
         # Print progress
         if print_progress: #i % int(n_steps/10) == 0:
@@ -61,11 +90,13 @@ def optimize(cfg, params_dict, loss_func, n_steps=100, lr=0.05, print_progress=T
         print('Optimization performed in ', round(total_end-total_start, 3))
 
     # Snap params_dict (and the trailing loss_list entry) back to the best iterate seen,
-    # so a caller's "final" loss and "final" params are always mutually consistent.
+    # so a caller's "final" loss and "final" params are always mutually consistent. Reassigns
+    # dict entries (rather than in-place .copy_()) since reparameterized sigma entries are
+    # derived (non-leaf) tensors, not the leaves Adam actually optimized.
     if best_params is not None and best_loss < loss_list[-1]:
         with torch.no_grad():
-            for key, value in params_dict.items():
-                value.copy_(best_params[key])
+            for key in params_dict.keys():
+                params_dict[key] = best_params[key]
         loss_list[-1] = best_loss
 
     #put current dist mean and cov in a file

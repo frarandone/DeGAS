@@ -126,19 +126,42 @@ def eq_func(self, dist):
 
     eq_coeff = self.coeff
     eq_const = self.const
-    
+
     # here there was a part to deal with deltas, but we removed it because in torch everything is differentiable
     # I suppressed the parts in which we truncate only some variables
     # observed and non-observed variables
     obs_idx = int(list(torch.where(eq_coeff!=0))[0][0])
     select = (torch.arange(dist.gm.n_dim())!=obs_idx)
-    # computes conditional cov and mean
+
+    # A component whose conditioning variable has exactly zero variance is a point mass at
+    # dist.gm.mu[:,obs_idx] (e.g. compileBernoulli's gm([...],[0,1],[0,0]), or any candidate
+    # program's own zero-sigma discrete component). Conditioning on it is then a deterministic
+    # match/mismatch against eq_const, not the usual Gaussian-conditioning division below --
+    # dividing by its zero variance would otherwise produce NaN/Inf that silently corrupts
+    # cond_sigma/cond_mu and crashes a later Normal(...) downstream. This mirrors the
+    # diag==0 point-mass handling PROGRAMS/likelihood.py already does for compute_likelihood.
+    obs_var = dist.gm.sigma[:,obs_idx,obs_idx]
+    is_point_mass = obs_var == 0
+    safe_obs_var = torch.where(is_point_mass, torch.ones_like(obs_var), obs_var)
+
+    # computes conditional cov and mean (division made safe for point-mass components; their
+    # result is discarded and replaced below)
     cond_sigma = torch.clone(dist.gm.sigma[:, select, :][:, :, select])
-    cond_sigma = cond_sigma - (1/dist.gm.sigma[:,obs_idx,obs_idx]).view(-1,1,1)*torch.bmm(dist.gm.sigma[:,select,obs_idx].unsqueeze(2), dist.gm.sigma[:,obs_idx,select].unsqueeze(1))
-    cond_mu = dist.gm.mu[:,select] + (1/dist.gm.sigma[:,obs_idx,obs_idx]).view(-1,1)*(eq_const-dist.gm.mu[:,obs_idx]).view(dist.gm.sigma.shape[0],1)*dist.gm.sigma[:,select,obs_idx]
+    cond_sigma = cond_sigma - (1/safe_obs_var).view(-1,1,1)*torch.bmm(dist.gm.sigma[:,select,obs_idx].unsqueeze(2), dist.gm.sigma[:,obs_idx,select].unsqueeze(1))
+    cond_mu = dist.gm.mu[:,select] + (1/safe_obs_var).view(-1,1)*(eq_const-dist.gm.mu[:,obs_idx]).view(dist.gm.sigma.shape[0],1)*dist.gm.sigma[:,select,obs_idx]
+
+    # a zero-variance dimension is uncorrelated with the rest in any valid covariance matrix,
+    # so conditioning on it leaves the other variables' marginal mean/cov unperturbed
+    cond_sigma = torch.where(is_point_mass.view(-1,1,1), dist.gm.sigma[:, select, :][:, :, select], cond_sigma)
+    cond_mu = torch.where(is_point_mass.view(-1,1), dist.gm.mu[:,select], cond_mu)
+
+    # a point-mass component whose fixed value doesn't match eq_const is incompatible with
+    # this observation -- zero probability, same treatment as the all-zero case below
+    mismatched_point_mass = is_point_mass & (dist.gm.mu[:,obs_idx] != eq_const)
+
     # if conditioned matrix is Null, it is equivalent to observing a single independent component
     all_zeros = torch.all(cond_sigma == 0, dim=(1,2))
-    new_pi = torch.where(all_zeros, 0., dist.gm.pi.flatten()).view(-1,1)
+    new_pi = torch.where(all_zeros | mismatched_point_mass, 0., dist.gm.pi.flatten()).view(-1,1)
     # normalizes weights
     norm_fact, norm_new_pi = normalize_weights(new_pi)
     # extends cond mu and sigma with values for observed bar (puts small variance to the observed variable)
@@ -318,7 +341,7 @@ class TruncRule(TRUNCListener):
             ID = ctx.var()._getText(self.data)
             coeff = torch.tensor(1.)
             if ctx.const():
-                coeff = self.parse_const(ctx)
+                coeff = self.parse_const(ctx.const())
             if op:
                 if op.SUB():
                     coeff = -coeff
@@ -329,7 +352,7 @@ class TruncRule(TRUNCListener):
             self.unpack_rvs(ctx.var())
             coeff = torch.tensor(1.)
             if ctx.const():
-                coeff = self.parse_const(ctx)
+                coeff = self.parse_const(ctx.const())
             if op:
                 if op.SUB():
                     coeff = -coeff

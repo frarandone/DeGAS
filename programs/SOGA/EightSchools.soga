@@ -1,0 +1,50 @@
+mu = gm([1.00],[0.00],[10.00]);
+tau = gm([1.00],[0.00],[10.00]);
+if tau < 0.00 {
+    tau = -1.00*tau;
+} else {
+    tau = tau;
+} end if;
+
+eta1 = gm([1.00],[0.00],[1.00]);
+eta2 = gm([1.00],[0.00],[1.00]);
+eta3 = gm([1.00],[0.00],[1.00]);
+eta4 = gm([1.00],[0.00],[1.00]);
+eta5 = gm([1.00],[0.00],[1.00]);
+eta6 = gm([1.00],[0.00],[1.00]);
+eta7 = gm([1.00],[0.00],[1.00]);
+eta8 = gm([1.00],[0.00],[1.00]);
+
+tmp1 = tau*eta1;
+theta1 = tmp1 + mu;
+tmp2 = tau*eta2;
+theta2 = tmp2 + mu;
+tmp3 = tau*eta3;
+theta3 = tmp3 + mu;
+tmp4 = tau*eta4;
+theta4 = tmp4 + mu;
+tmp5 = tau*eta5;
+theta5 = tmp5 + mu;
+tmp6 = tau*eta6;
+theta6 = tmp6 + mu;
+tmp7 = tau*eta7;
+theta7 = tmp7 + mu;
+tmp8 = tau*eta8;
+theta8 = tmp8 + mu;
+
+y1 = gm([1.00],[0.00],[15.00]);
+y1 = y1 + theta1;
+y2 = gm([1.00],[0.00],[10.00]);
+y2 = y2 + theta2;
+y3 = gm([1.00],[0.00],[16.00]);
+y3 = y3 + theta3;
+y4 = gm([1.00],[0.00],[11.00]);
+y4 = y4 + theta4;
+y5 = gm([1.00],[0.00],[9.00]);
+y5 = y5 + theta5;
+y6 = gm([1.00],[0.00],[11.00]);
+y6 = y6 + theta6;
+y7 = gm([1.00],[0.00],[10.00]);
+y7 = y7 + theta7;
+y8 = gm([1.00],[0.00],[18.00]);
+y8 = y8 + theta8;
